@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "prepare": "husky",
     "seed:batches": "tsx scripts/seedBatches.mjs",
-    "verify:batch-dates": "tsx scripts/verifyBatchDates.mjs"
+    "verify:batch-dates": "tsx scripts/verifyBatchDates.mjs",
+    "seed:syllabus": "tsx scripts/seedSyllabus.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
