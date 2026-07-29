@@ -69,8 +69,8 @@ ui-debug.log
 Study-tracker-copy/
 
 # Local scraper artifacts (we deleted download2.js and root package.json;
-# the rest of the original scraper stack is not part of v1.0).
-package-lock.json
+# per-app package-lock.json is committed for reproducible CI builds).
+/package-lock.json
 
 # OS metadata
 desktop.ini
