@@ -1,13 +1,30 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Providers } from './Providers';
-import { t } from '@/lib/i18n';
-
-function Home() {
-  return <h1>{t('app.title')}</h1>;
-}
+import { SignInScreen } from '@/features/auth/SignInScreen';
+import { Onboarding } from '@/features/onboarding/Onboarding';
+import { Home } from '@/features/home/Home';
+import { RequireAuth, RequireProfile } from './guards';
 
 const router = createBrowserRouter([
-  { path: '/', element: <Home /> },
+  { path: '/sign-in', element: <SignInScreen /> },
+  {
+    path: '/',
+    element: (
+      <RequireAuth>
+        <RequireProfile>
+          <Home />
+        </RequireProfile>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/onboarding',
+    element: (
+      <RequireAuth>
+        <Onboarding />
+      </RequireAuth>
+    ),
+  },
 ]);
 
 export function AppRouter() {
