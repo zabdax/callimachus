@@ -13,6 +13,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
     "firebase": "^10.14.1",
     "i18next": "^23.16.8",
     "react": "^18.3.1",
