@@ -13,8 +13,11 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "i18next": "^23.16.8",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-i18next": "^15.7.4",
+    "react-router-dom": "^6.30.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",
@@ -22,6 +25,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^2.0.5"
   }
 }
