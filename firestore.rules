@@ -27,6 +27,7 @@ service cloud.firestore {
       match /syllabus/{x}    { allow read, write: if isSelf(uid); }
       match /upcomingTasks/{x}{ allow read, write: if isSelf(uid); }
       match /meta/{x}        { allow read, write: if isSelf(uid); }
+      match /activeSession/{x} { allow read, write: if isSelf(uid); }
     }
 
     match /paymentRequests/{id} {
