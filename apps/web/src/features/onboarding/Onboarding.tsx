@@ -1,6 +1,10 @@
-import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/features/auth/AuthContext';
+import { OnboardingForm } from './OnboardingForm';
+import { useNavigate } from 'react-router-dom';
 
 export function Onboarding() {
-  const { t } = useTranslation();
-  return <p className="p-4 text-text">{t('onboarding.step1.title')}</p>;
+  const { user } = useAuth();
+  const nav = useNavigate();
+  if (!user) return null;
+  return <OnboardingForm uid={user.uid} onDone={() => nav('/', { replace: true })} />;
 }
