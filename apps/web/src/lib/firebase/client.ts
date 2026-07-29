@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
