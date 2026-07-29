@@ -3,3 +3,4 @@ export {
   recomputeBatchStatusCron,
   recomputeBatchStatusCallable,
 } from './recomputeBatchStatus.js';
+export { scheduledRevisions } from './scheduledRevisions.js';
