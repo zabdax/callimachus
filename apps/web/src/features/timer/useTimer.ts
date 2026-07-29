@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { elapsedMs, type Anchor } from './dateNowDelta';
 import { saveAnchor, loadAnchor, clearAnchor } from './persistence';
+import { callSessionStart } from './serverAnchor';
 import type { TimerState, TimerStatus } from './types';
 
 type Opts = { tickMs?: number; uid?: string };
@@ -28,6 +29,12 @@ export function useTimer(opts: Opts = {}) {
     // startTs immediately and reconcile serverStartTs on success.
     setState({ status: 'running', startTs, pausedAccumMs: 0, pausedAt: null });
     persist({ status: 'running', startTs, pausedAccumMs: 0, pausedAt: null }, null);
+    try {
+      const { serverStartTs } = await callSessionStart(startTs);
+      persist({ status: 'running', startTs, pausedAccumMs: 0, pausedAt: null }, serverStartTs);
+    } catch {
+      // network down — serverStartTs will be filled by background sync on reconnect
+    }
   }, [persist]);
 
   const pause = useCallback(() => {
