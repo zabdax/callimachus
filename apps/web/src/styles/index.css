@@ -1,1 +1,29 @@
-/* Filled in Task 5 (Tailwind base). Empty for now. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F4F1EC;
+  --surface: #FFFFFF;
+  --surface-2: #ECE7DE;
+  --text: #1B2A41;
+  --text-dim: #5C6B7E;
+  --primary: #2E5A88;
+  --accent: #E0A458;
+  --success: #3F6B4E;
+  --warning: #C97B5A;
+  --danger: #B33A3A;
+}
+
+html.dark {
+  --bg: #0F1620;
+  --surface: #172030;
+  --surface-2: #1E293B;
+  --text: #E6EAF0;
+  --text-dim: #94A3B8;
+  --primary: #6B9BD1;
+  --accent: #E0A458;
+  --success: #7FB48E;
+  --warning: #D69472;
+  --danger: #E16A6A;
+}
