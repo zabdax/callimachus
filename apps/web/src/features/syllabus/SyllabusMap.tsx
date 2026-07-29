@@ -1,13 +1,17 @@
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/features/auth/AuthContext';
 import { useSyllabus } from './useSyllabus';
 import { subjectCompletion } from './subjectCompletion';
 import type { Stage } from './nextTypeFor';
 
 const STAGES: Stage[] = ['firstStudy', 'firstRevision', 'secondRevision', 'thirdRevision'];
 
-export function SyllabusMap({ uid, medium }: { uid: string; medium: 'bangla' | 'english' }) {
+export function SyllabusMap({ medium }: { medium: 'bangla' | 'english' }) {
   const { t } = useTranslation();
-  const { subjects, chapters, loading, toggle } = useSyllabus(uid, medium);
+  const { user } = useAuth();
+  const uid = user?.uid ?? '';
+  const { subjects = [], chapters = {}, loading, toggle } = useSyllabus(uid, medium);
+  if (!uid) return null;
 
   if (loading) return <p>{t('common.loading')}</p>;
 

@@ -3,6 +3,8 @@ import { Providers } from './Providers';
 import { SignInScreen } from '@/features/auth/SignInScreen';
 import { Onboarding } from '@/features/onboarding/Onboarding';
 import { Home } from '@/features/home/Home';
+import { SyllabusMap } from '@/features/syllabus/SyllabusMap';
+import { TasksScreen } from '@/features/tasks/TasksScreen';
 import { RequireAuth, RequireProfile } from './guards';
 
 const router = createBrowserRouter([
@@ -16,6 +18,10 @@ const router = createBrowserRouter([
         </RequireProfile>
       </RequireAuth>
     ),
+    children: [
+      { path: 'syllabus', element: <SyllabusMap medium="bangla" /> },
+      { path: 'tasks', element: <TasksScreen /> },
+    ],
   },
   {
     path: '/onboarding',

@@ -5,6 +5,10 @@ import { i18n } from '@/lib/i18n';
 
 const toggle = vi.fn().mockResolvedValue(undefined);
 
+vi.mock('@/features/auth/AuthContext', () => ({
+  useAuth: () => ({ user: { uid: 'u1' }, loading: false }),
+}));
+
 vi.mock('@/features/syllabus/useSyllabus', () => ({
   useSyllabus: () => ({
     subjects: [
@@ -16,7 +20,12 @@ vi.mock('@/features/syllabus/useSyllabus', () => ({
     ],
     chapters: {
       physics1: {
-        p1c01: { firstStudy: false, firstRevision: false, secondRevision: false, thirdRevision: false },
+        p1c01: {
+          firstStudy: false,
+          firstRevision: false,
+          secondRevision: false,
+          thirdRevision: false,
+        },
       },
     },
     loading: false,
@@ -35,7 +44,7 @@ function renderWithI18n(ui: React.ReactNode) {
 
 describe('SyllabusMap', () => {
   it('renders 4 checkboxes per chapter and toggling calls toggle()', async () => {
-    renderWithI18n(<SyllabusMap uid="u1" medium="bangla" />);
+    renderWithI18n(<SyllabusMap medium="bangla" />);
     expect(screen.getAllByRole('checkbox')).toHaveLength(4);
     fireEvent.click(screen.getByLabelText(/1st Study/i));
     await waitFor(() =>

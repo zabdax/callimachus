@@ -4,7 +4,7 @@ import type { ChaptersMap, SubjectDoc } from './types';
 
 export type SyllabusLoad = {
   subjects: SubjectDoc[];
-  chapters: Record<string, SubjectDoc['subjectId'] extends string ? string : never, ChaptersMap>;
+  chapters: Record<string, ChaptersMap>;
 };
 
 /** Loads all `/syllabus/board/{medium}` docs and the user's per-subject progress. */
