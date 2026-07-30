@@ -4,3 +4,7 @@ export {
   recomputeBatchStatusCallable,
 } from './recomputeBatchStatus.js';
 export { scheduledRevisions } from './scheduledRevisions.js';
+export { sessionStart } from './sessionStart.js';
+export { presenceNonce } from './presenceNonce.js';
+export { emitNonce } from './emitNonce.js';
+export { processStudySession } from './processStudySession.js';
