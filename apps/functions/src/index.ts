@@ -8,3 +8,4 @@ export { sessionStart } from './sessionStart.js';
 export { presenceNonce } from './presenceNonce.js';
 export { emitNonce } from './emitNonce.js';
 export { processStudySession } from './processStudySession.js';
+export { generateDailyPlan } from './generateDailyPlan.js';
