@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# Build output
+dist/
+build/
+out/
+.vite/
+.tsbuildinfo
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+!.env.example
+**/service-account.json
+**/firebase-adminsdk-*.json
+**/*.pem
+**/*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing & coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+.playwright/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log
+.firebaserc.local
+
+# Local-only reference / research
+.cursor/
+.genome/
+.windsurfrules
+
+# Downloaded reference copy of the original app (do not commit)
+Study-tracker-copy/
+
+# Local scraper artifacts (we deleted download2.js and root package.json;
+# per-app package-lock.json is committed for reproducible CI builds).
+/package-lock.json
+
+# OS metadata
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
