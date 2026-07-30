@@ -2,7 +2,7 @@
   "name": "@hsc-tracker/functions",
   "private": true,
   "type": "module",
-  "main": "lib/index.js",
+  "main": "lib/functions/src/index.js",
   "engines": { "node": "20" },
   "scripts": {
     "build": "tsc",
