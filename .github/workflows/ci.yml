@@ -21,6 +21,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Functions test
+        working-directory: apps/functions
+        run: |
+          npm ci
+          npm test
       - run: npm run build
       - name: Functions build
         working-directory: apps/functions

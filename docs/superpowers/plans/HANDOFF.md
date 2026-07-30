@@ -378,3 +378,28 @@ Three plan files to create:
 - `F:\Studytracker\docs\superpowers\plans\2026-07-29-foundation-and-profile-plan.md`
 - `F:\Studytracker\docs\superpowers\plans\2026-07-29-timer-and-progress-plan.md`
 - `F:\Studytracker\docs\superpowers\plans\2026-07-29-subscription-admin-and-ship-plan.md`
+
+---
+
+## Plan 2 → Plan 3 Handoff (added 2026-07-30)
+
+**Plan 2 shipped:**
+- Timer core (Date.now()-anchored, persists across tab-switch, ±1 s)
+- Server-anchored sessions (`sessionStart` + `processStudySession`)
+- BST midnight split, presence nonces, offline queue + replay
+- PaceCard (Recharts radial, 4 color states) + ExamCountdown
+- Time-block CRUD + timeline UI (06:00–23:00)
+- `pickDailyPlan` + `generateDailyPlan` 05:00 Asia/Dhaka cron
+- DailyPlanCard widget
+- Leaderboard read + 15-min RankGate + hourly rollup cron + 30d prune
+- Overview integration in Home (PaceCard + ExamCountdown + DailyPlanCard grid)
+- CI runs Functions tests (added `Functions test` step in `build-test` job)
+- Playwright timer-persistence spec **not committed** — repo has no `@playwright/test` install, no `playwright.config.ts`, no `tests/e2e/`. Per Plan 2 Session 6 decision rule: skipped. Re-add when Playwright is configured in the repo.
+
+**Plan 3 must address:**
+1. **Wire `/__test/timer`** — a dev-only route that mounts `TimerUI` with a mock uid, AND install + configure `@playwright/test` so the timer-persistence e2e can run.
+2. **Full BN/EN translations** — replace placeholder keys in `bn.json`.
+3. **FCM notifications** — call into `users.fcmTokens` written by Plan 1's `onboardingProfile`.
+4. **Chapter-tagging UI** in the timer (pass `chapterId` to `processStudySession`).
+5. **Subscription + admin approval flow** + data export.
+6. **PWA manifest + Workbox + Sentry + accessibility audit + privacy policy + marketing page**.

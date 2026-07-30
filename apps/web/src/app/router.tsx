@@ -3,6 +3,7 @@ import { Providers } from './Providers';
 import { SignInScreen } from '@/features/auth/SignInScreen';
 import { Onboarding } from '@/features/onboarding/Onboarding';
 import { Home } from '@/features/home/Home';
+import { Overview } from '@/features/home/Overview';
 import { SyllabusMap } from '@/features/syllabus/SyllabusMap';
 import { TasksScreen } from '@/features/tasks/TasksScreen';
 import { StudyScreen } from '@/features/timer/StudyScreen';
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
+      { index: true, element: <Overview /> },
       { path: 'syllabus', element: <SyllabusMap medium="bangla" /> },
       { path: 'tasks', element: <TasksScreen /> },
       { path: 'study', element: <StudyScreenWithUid /> },
