@@ -9,6 +9,8 @@ import { TasksScreen } from '@/features/tasks/TasksScreen';
 import { StudyScreen } from '@/features/timer/StudyScreen';
 import { TestTimerScreen } from '@/features/timer/TestTimerScreen';
 import { SubscribeScreen } from '@/features/subscription/SubscribeScreen';
+import { ApprovalQueue } from '@/features/admin/ApprovalQueue';
+import { RequireAdmin } from '@/features/admin/RequireAdmin';
 import { RequireAuth, RequireProfile } from './guards';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -38,6 +40,19 @@ const router = createBrowserRouter([
         <Onboarding />
       </RequireAuth>
     ),
+  },
+  {
+    path: '/admin',
+    element: (
+      <RequireAuth>
+        <RequireAdmin>
+          <ApprovalQueue />
+        </RequireAdmin>
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <ApprovalQueue /> },
+    ],
   },
   // Dev-only route. Only mounted when VITE_ENABLE_TEST_ROUTES is set.
   // Production builds (no env) never include it.
