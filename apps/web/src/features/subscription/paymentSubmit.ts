@@ -1,11 +1,10 @@
-import { getStorage, ref, uploadBytes } from 'firebase/storage';
 import {
   getFirestore,
   collection,
   addDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { callWorkerUnwrap } from '@/lib/workers/client';
 import { app } from '@/lib/firebase/client';
 import type { PlanId } from './plans';
 
@@ -18,7 +17,8 @@ type SubmitInput = {
 
 /**
  * End-to-end client flow for submitting a payment request:
- *  1. Mint a signed upload URL via the `generateSignedUploadUrl` Cloud Function.
+ *  1. Mint a signed upload URL via the `generateSignedUploadUrl` Worker
+ *     (R2-backed; 5-min expiry, image/* only).
  *  2. PUT the screenshot file to that signed URL.
  *  3. Write a `paymentRequests/{autoId}` doc with status='pending'.
  *
@@ -27,17 +27,23 @@ type SubmitInput = {
 export async function submitPaymentRequest(input: SubmitInput): Promise<string> {
   const { uid, planId, trxId, file } = input;
 
-  const mint = httpsCallable<
+  const signed = await callWorkerUnwrap<
     { contentType: string },
     { url: string; path: string; expires: number }
-  >(getFunctions(app), 'generateSignedUploadUrl');
+  >('generateSignedUploadUrl', { contentType: file.type });
 
-  const { data: signed } = await mint({ contentType: file.type });
-
-  // Upload the file via the signed URL. We could also use the Storage SDK
-  // with `uploadBytes(ref(storage, path), file)`, but the signed URL flow
-  // keeps the bucket un-listed publicly.
-  await uploadBytes(ref(getStorage(app), signed.path), file);
+  // Upload via the signed URL (R2 in production). We deliberately do
+  // NOT use `uploadBytes(ref(getStorage(app), signed.path), file)` —
+  // we don't want a separate Firebase Storage SDK in the bundle, and
+  // the Worker controls the bucket policy entirely.
+  const put = await fetch(signed.url, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!put.ok) {
+    throw new Error(`upload failed: ${put.status}`);
+  }
 
   const db = getFirestore(app);
   const docRef = await addDoc(collection(db, 'paymentRequests'), {

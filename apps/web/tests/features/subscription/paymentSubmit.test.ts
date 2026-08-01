@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const uploadBytesMock = vi.fn().mockResolvedValue(undefined);
-const refMock = vi.fn();
+const fetchMock = vi.fn();
 const addDocMock = vi.fn().mockResolvedValue({ id: 'req-123' });
 const collectionMock = vi.fn();
 const serverTimestampMock = vi.fn(() => ({ __serverTimestamp: true }));
-const httpsCallableMock = vi.fn();
 
-vi.mock('firebase/storage', () => ({
-  getStorage: vi.fn(() => ({ _storage: true })),
-  ref: (...args: unknown[]) => refMock(...args),
-  uploadBytes: (...args: unknown[]) => uploadBytesMock(...args),
+vi.stubGlobal('fetch', fetchMock);
+
+vi.mock('firebase/auth', () => ({
+  getAuth: () => ({ currentUser: { getIdToken: async () => 't' } }),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -20,38 +18,37 @@ vi.mock('firebase/firestore', () => ({
   serverTimestamp: () => serverTimestampMock(),
 }));
 
-vi.mock('firebase/functions', () => ({
-  getFunctions: vi.fn(() => ({ _fn: true })),
-  httpsCallable: (...args: unknown[]) => httpsCallableMock(...args),
-}));
+vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 import { submitPaymentRequest } from '@/features/subscription/paymentSubmit';
 
 describe('submitPaymentRequest', () => {
   beforeEach(() => {
-    uploadBytesMock.mockClear();
+    fetchMock.mockReset();
     addDocMock.mockClear();
-    httpsCallableMock.mockClear();
     collectionMock.mockClear();
-    refMock.mockClear();
 
-    // Each test gets a fresh httpsCallable that returns a one-off vi.fn()
-    httpsCallableMock.mockImplementation(() =>
-      vi.fn(async (data: { contentType: string }) => ({
+    // 1st call: generateSignedUploadUrl
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
         data: {
-          url: `https://signed/${data.contentType}`,
-          path: `paymentRequests/u1/abc.png`,
+          url: 'https://signed/paymentRequests/u1/abc.png',
+          path: 'paymentRequests/u1/abc.png',
           expires: Date.now() + 5 * 60 * 1000,
         },
-      })),
-    );
+      }),
+    });
+    // 2nd call: PUT the file to signed URL
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200 });
   });
 
   it('mints a signed URL, uploads the file, and creates a paymentRequest doc', async () => {
     const file = new File(['x'], 'screenshot.png', { type: 'image/png' });
     const id = await submitPaymentRequest({ uid: 'u1', planId: '3m', trxId: 'TXN1', file });
     expect(id).toBe('req-123');
-    expect(uploadBytesMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(addDocMock).toHaveBeenCalledTimes(1);
   });
 
@@ -68,12 +65,11 @@ describe('submitPaymentRequest', () => {
     expect(docArg.storagePath).toMatch(/^paymentRequests\/u1\//);
   });
 
-  it('passes the file contentType to the signed-url function', async () => {
+  it('passes the file contentType to the signed-url call', async () => {
     const file = new File(['x'], 'shot.jpg', { type: 'image/jpeg' });
     await submitPaymentRequest({ uid: 'u1', planId: '1m', trxId: 'TXN2', file });
-    const callableResult = httpsCallableMock.mock.results[0];
-    expect(callableResult).toBeDefined();
-    const fn = (callableResult as { value: ReturnType<typeof vi.fn> }).value;
-    expect(fn).toHaveBeenCalledWith({ contentType: 'image/jpeg' });
+    const firstCall = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(firstCall[1].body as string);
+    expect(body).toEqual({ data: { contentType: 'image/jpeg' } });
   });
 });

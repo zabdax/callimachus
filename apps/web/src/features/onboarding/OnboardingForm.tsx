@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { httpsCallable, getFunctions } from 'firebase/functions';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { app } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
 import { BATCH_SEED } from '@/features/batches/seedData';
@@ -30,8 +31,15 @@ export function OnboardingForm({ uid, onDone }: { uid: string; onDone: (v: FormD
 
   const submit = handleSubmit(async (data) => {
     const payload = { ...data, displayName: '' };
-    const fn = httpsCallable<typeof payload, { ok: boolean }>(getFunctions(app), 'onboardingProfile');
-    await fn(payload);
+    // Per Plan 4 / session 7 design change: onboardingProfile is no
+    // longer a Cloud Function (Workers don't have an Auth trigger).
+    // We write the user doc directly here. Firestore rules still gate
+    // the write — only the owner can write their own doc.
+    await setDoc(doc(getFirestore(app), 'users', uid), {
+      ...payload,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
     onDone(payload);
   });
 

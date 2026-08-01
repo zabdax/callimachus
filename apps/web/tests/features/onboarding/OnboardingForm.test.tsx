@@ -3,14 +3,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@/lib/i18n';
 
-vi.mock('firebase/functions', () => ({
-  getFunctions: () => ({}),
-  httpsCallable: (_a: unknown, name: string) => async (data: unknown) => {
-    if (name === 'onboardingProfile') return { data: { ok: true, payload: data } };
-    return { data: { ok: true, payload: data } };
-  },
-  connectFunctionsEmulator: () => undefined,
+const setDocMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('firebase/firestore', () => ({
+  getFirestore: vi.fn(() => ({ _db: true })),
+  doc: vi.fn(() => ({ _doc: true })),
+  setDoc: (...a: unknown[]) => setDocMock(...a),
+  serverTimestamp: () => ({ __serverTimestamp: true }),
 }));
+
+vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 import { OnboardingForm } from '@/features/onboarding/OnboardingForm';
 
@@ -19,7 +21,7 @@ function renderWithI18n(ui: React.ReactNode) {
 }
 
 describe('OnboardingForm', () => {
-  it('submits medium + batch + college to onboardingProfile', async () => {
+  it('submits medium + batch + college to /users/{uid} via setDoc', async () => {
     const onDone = vi.fn();
     renderWithI18n(<OnboardingForm uid="u1" onDone={onDone} />);
 
@@ -42,5 +44,6 @@ describe('OnboardingForm', () => {
         medium: 'bangla',
       }),
     );
+    expect(setDocMock).toHaveBeenCalled();
   });
 });

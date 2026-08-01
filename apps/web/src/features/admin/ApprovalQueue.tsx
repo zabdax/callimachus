@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '@/lib/firebase/client';
+import { callWorkerUnwrap } from '@/lib/workers/client';
 import {
   fetchPendingRequests,
   type PendingRequest,
@@ -35,11 +34,10 @@ export function ApprovalQueue() {
       setBusyId(id);
       setError(null);
       try {
-        const fn = httpsCallable<
-          { paymentRequestId: string },
-          { ok: boolean }
-        >(getFunctions(app), 'approvePayment');
-        await fn({ paymentRequestId: id });
+        await callWorkerUnwrap<{ paymentRequestId: string }, { ok: boolean }>(
+          'approvePayment',
+          { paymentRequestId: id },
+        );
         await refresh();
       } catch (e) {
         setError((e as Error).message || 'Approve failed.');
