@@ -10,3 +10,4 @@ export { emitNonce } from './emitNonce.js';
 export { processStudySession } from './processStudySession.js';
 export { generateDailyPlan } from './generateDailyPlan.js';
 export { rollUpLeaderboards } from './rollUpLeaderboards.js';
+export { generateSignedUploadUrl } from './generateSignedUploadUrl.js';
