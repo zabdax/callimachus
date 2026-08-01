@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { captureError } from '@/lib/sentry';
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -11,6 +12,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   override componentDidCatch(error: Error) {
+    captureError(error);
     console.error('App crashed:', error);
   }
 
