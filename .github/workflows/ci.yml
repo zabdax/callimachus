@@ -17,7 +17,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            apps/functions/package-lock.json
+            apps/workers/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm test
@@ -26,9 +29,19 @@ jobs:
         run: |
           npm ci
           npm test
+      - name: Workers test
+        working-directory: apps/workers
+        run: |
+          npm ci
+          npm test
       - run: npm run build
       - name: Functions build
         working-directory: apps/functions
+        run: |
+          npm ci
+          npm run build
+      - name: Workers build
+        working-directory: apps/workers
         run: |
           npm ci
           npm run build

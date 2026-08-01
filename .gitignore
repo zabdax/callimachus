@@ -80,6 +80,14 @@ lighthouserc.*
 # husky hooks that live on local disk, not in the source tree
 .husky/_/
 
+# Local ZCode CLI cache (this repo's working session metadata)
+.zcode/
+
+# Cloudflare Workers local artifacts
+apps/workers/.wrangler/
+apps/workers/node_modules/
+apps/workers/dist/
+
 # OS metadata
 desktop.ini
 ehthumbs.db

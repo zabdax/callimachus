@@ -85,6 +85,26 @@ ours."
 | Storage | Cloud Storage for payment screenshots | signed URLs only |
 | Observability | Sentry (web SDK) | source maps via `@sentry/vite-plugin` |
 
+## Architecture target
+
+The v1.0.0 release still runs the full Firebase stack (Functions, Storage,
+Hosting). The repository is being migrated to a "Hybrid A" target where
+server compute moves to Cloudflare Workers, payment screenshots move to
+Cloudflare R2, and ephemeral cache lives in Cloudflare KV. Firebase
+Auth and Cloud Firestore (free Spark tier) stay.
+
+Migration is being shipped in small sessions. The current branch,
+`feat/plan4-session1-foundation`, adds the `apps/workers/` scaffold
+and a `/api/echo` smoke endpoint so the Workers toolchain is wired into
+CI. No production behaviour changes yet. See the design spec for the
+full mapping:
+
+[`docs/superpowers/specs/2026-08-01-platform-migration-design.md`](docs/superpowers/specs/2026-08-01-platform-migration-design.md)
+
+Until the migration lands, the deploy story in `SETUP.md` and the
+rules in `firestore.rules` + `storage.rules` are still the source of
+truth.
+
 ## Layout
 
 ```

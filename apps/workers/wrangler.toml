@@ -1,0 +1,22 @@
+# wrangler.toml for Callimachus Workers.
+#
+# Plan 4 / session 1: scaffold-only. No R2 bucket, no KV namespace, no
+# Pages project yet. Bindings for those resources will land in later
+# sessions (R2 in session 4, KV in session 6, Pages deploy from session 8).
+#
+# This config is intentionally minimal so `wrangler dev` can boot the
+# smoke handler without any secrets or external resources.
+
+name = "callimachus-workers"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Observability is free on Workers; keep it on for the scaffold so the
+# first real deploy shows request logs.
+[observability]
+enabled = true
+
+# `vars` blocks dev-only env overrides. Keep empty for now.
+[vars]
+ENVIRONMENT = "development"
