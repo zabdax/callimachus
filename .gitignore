@@ -60,10 +60,11 @@ ui-debug.log
 *-debug.log
 .firebaserc.local
 
-# Local-only reference / research
+# Local-only reference / research / MCP tooling
 .cursor/
 .genome/
 .windsurfrules
+AGENTS.md
 
 # Downloaded reference copy of the original app (do not commit)
 Study-tracker-copy/
@@ -71,6 +72,13 @@ Study-tracker-copy/
 # Local scraper artifacts (we deleted download2.js and root package.json;
 # per-app package-lock.json is committed for reproducible CI builds).
 /package-lock.json
+
+# Lighthouse CI outputs
+.lighthouseci/
+lighthouserc.*
+
+# husky hooks that live on local disk, not in the source tree
+.husky/_/
 
 # OS metadata
 desktop.ini

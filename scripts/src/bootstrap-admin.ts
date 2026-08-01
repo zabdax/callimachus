@@ -4,15 +4,22 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 export type BootstrapAdminOptions = { dryRun?: boolean };
 
 /**
- * Pure-ish helper that promotes a Firebase Auth user to admin:
- *  1. Sets custom claim `{ admin: true }` on the Auth user (idempotent).
- *  2. Creates /admins/{uid} Firestore doc (idempotent).
+ * TEMPLATE helper for promoting a Firebase Auth user to admin.
  *
- * Requires the Firebase Admin SDK to be initialized with credentials
- * that allow `auth.updateUser` + `firestore.doc().set()`.
+ * What it does:
+ *  1. Sets custom claim `{ admin: true }` on the Auth user (idempotent).
+ *  2. Writes /admins/{uid} Firestore doc with a timestamp (idempotent).
+ *
+ * Reads credentials from the environment (GOOGLE_APPLICATION_CREDENTIALS
+ * pointing at a service-account JSON outside this repo, or `firebase
+ * login`). This script never embeds credentials.
+ *
+ * Before running this against your own Firebase project, please read
+ * docs/admin-bootstrap.md (the steps there are for the maintainers'
+ * production project; clone them for your own project).
  */
 export async function run(uid: string | undefined, opts: BootstrapAdminOptions = {}): Promise<void> {
-  if (!uid) throw new Error('uid is required');
+  if (!uid) throw new Error('uid is required (pass the Firebase Auth UID as argv[2])');
 
   const auth = getAuth();
   const db = getFirestore();
