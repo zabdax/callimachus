@@ -27,11 +27,11 @@ export async function registerFcmToken(input: RegisterFcmInput): Promise<string 
   if (!tk) return null;
 
   const db = getFirestore(app);
-  await setDoc(doc(db, 'users', input.uid, 'fcmTokens', tk.token), {
-    token: tk.token,
+  await setDoc(doc(db, 'users', input.uid, 'fcmTokens', tk), {
+    token: tk,
     createdAt: serverTimestamp(),
   });
-  return tk.token;
+  return tk;
 }
 
 /**

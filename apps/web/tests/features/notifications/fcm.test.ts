@@ -2,12 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const getTokenMock = vi.fn();
 const onMessageMock = vi.fn(() => () => {});
-const requestPermissionMock = vi.fn();
 
 vi.mock('firebase/messaging', () => ({
   getMessaging: vi.fn(() => ({ _messaging: true })),
-  getToken: (...args: unknown[]) => getTokenMock(...args),
-  onMessage: (...args: unknown[]) => onMessageMock(...args),
+  getToken: vi.fn(() => getTokenMock()),
+  onMessage: vi.fn(() => onMessageMock()),
 }));
 
 const docMock = vi.fn();
@@ -60,7 +59,7 @@ describe('fcm', () => {
   });
 
   it('registerFcmToken writes to users/{uid}/fcmTokens/{token}', async () => {
-    getTokenMock.mockResolvedValue({ token: 'abc-token' });
+    getTokenMock.mockResolvedValue('abc-token');
     await registerFcmToken({ uid: 'u1', vapidKey: 'vk' });
     expect(setDocMock).toHaveBeenCalled();
     const setArgs = setDocMock.mock.calls[0] as unknown as [unknown, Record<string, unknown>];

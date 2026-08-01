@@ -12,11 +12,15 @@ import { SubscribeScreen } from '@/features/subscription/SubscribeScreen';
 import { ApprovalQueue } from '@/features/admin/ApprovalQueue';
 import { RequireAdmin } from '@/features/admin/RequireAdmin';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
+import { Landing } from '@/pages/Landing';
+import { PrivacyPolicy } from '@/pages/Privacy';
 import { RequireAuth, RequireProfile } from './guards';
 import { useAuth } from '@/features/auth/AuthContext';
 
 const router = createBrowserRouter([
   { path: '/sign-in', element: <SignInScreen /> },
+  { path: '/welcome', element: <Landing /> },
+  { path: '/privacy', element: <PrivacyPolicy /> },
   {
     path: '/',
     element: (
