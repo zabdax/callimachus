@@ -12,3 +12,4 @@ export { generateDailyPlan } from './generateDailyPlan.js';
 export { rollUpLeaderboards } from './rollUpLeaderboards.js';
 export { generateSignedUploadUrl } from './generateSignedUploadUrl.js';
 export { approvePayment } from './approvePayment.js';
+export { sendRevisionReminder } from './sendRevisionReminder.js';
