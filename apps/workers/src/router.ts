@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
-import { requireAuth } from './auth.js';
+import { requireAuth, type AuthVariables } from './auth.js';
+import { processStudySession } from './handlers/processStudySession.js';
+import { sessionStart } from './handlers/sessionStart.js';
+import { requireUid, WorkerError } from './db.js';
 
 /**
  * Hono router for the Callimachus Worker. Plan 4 / session 1 ships only
@@ -36,6 +39,42 @@ app.get(
     return c.json({ ok: true, uid, admin: !!claims?.admin });
   },
 );
+
+// Session 3: ported callable endpoints. The Firestore adapter is
+// injected via getDb() — production wires the Admin SDK client in
+// src/firebase-admin.ts; tests inject a stub.
+async function getDb() {
+  const mod = await import('./firebase-admin.js');
+  return mod.firestoreAdapter;
+}
+
+app.post('/api/sessionStart', requireAuth(PROJECT_ID), async (c) => {
+  const claims = c.get('claims');
+  const uid = requireUid(claims);
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as { data?: { clientStartTs?: number } };
+    const clientStartTs = body.data?.clientStartTs ?? Date.now();
+    const out = await sessionStart(uid, { clientStartTs }, await getDb());
+    return c.json({ data: out });
+  } catch (e) {
+    const w = e instanceof WorkerError ? e.toResponse() : { status: 500, body: { ok: false, error: 'internal', message: (e as Error).message } };
+    return c.json(w.body, w.status as 500);
+  }
+});
+
+app.post('/api/processStudySession', requireAuth(PROJECT_ID), async (c) => {
+  const claims = c.get('claims');
+  const uid = requireUid(claims);
+  try {
+    const body = (await c.req.json()) as { data: Parameters<typeof processStudySession>[1] };
+    const ua = c.req.header('user-agent') ?? 'unknown';
+    const out = await processStudySession(uid, body.data, await getDb(), ua);
+    return c.json({ data: out });
+  } catch (e) {
+    const w = e instanceof WorkerError ? e.toResponse() : { status: 500, body: { ok: false, error: 'internal', message: (e as Error).message } };
+    return c.json(w.body, w.status as 500);
+  }
+});
 
 // Catch-all 404 in JSON shape so client error handling is consistent.
 app.notFound((c) =>
