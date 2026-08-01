@@ -1,22 +1,64 @@
-# wrangler.toml for Callimachus Workers.
+# wrangler.toml for HSC Crackers Workers (Plan 4).
 #
-# Plan 4 / session 1: scaffold-only. No R2 bucket, no KV namespace, no
-# Pages project yet. Bindings for those resources will land in later
-# sessions (R2 in session 4, KV in session 6, Pages deploy from session 8).
+# This is the production manifest. The bucket + KV namespace IDs are
+# placeholders — set them to the resources you create in the Cloudflare
+# dashboard, then run `wrangler deploy`. Secrets (FIREBASE_ACCESS_TOKEN
+# etc.) come from `wrangler secret put`.
 #
-# This config is intentionally minimal so `wrangler dev` can boot the
-# smoke handler without any secrets or external resources.
+# 5 cron triggers is the free-tier maximum — we use 4 by bundling
+# emitNonce + sendRevisionReminder into one (both hourly at :30).
+# See docs/superpowers/specs/2026-08-01-platform-migration-design.md §4.
 
-name = "callimachus-workers"
+name = "hsc-crackers-workers"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Observability is free on Workers; keep it on for the scaffold so the
-# first real deploy shows request logs.
 [observability]
 enabled = true
 
-# `vars` blocks dev-only env overrides. Keep empty for now.
+# === Vars (non-secret env) ===
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
+FIREBASE_PROJECT_ID = "hsc-crackers-prod"
+# Public Workers origin — the web app calls `${WORKERS_BASE}/api/<name>`.
+WORKERS_BASE = "https://hsc-crackers-workers.zubayer-hasanshaad.workers.dev"
+
+# === R2 bucket for bKash screenshots ===
+# Create the bucket in the Cloudflare dashboard:
+#   wrangler r2 bucket create hsc-tracker-screenshots
+[[r2_buckets]]
+binding = "SCREENSHOTS"
+bucket_name = "hsc-tracker-screenshots"
+preview_bucket_name = "hsc-tracker-screenshots-preview"
+
+# === KV namespace for ephemeral state (presence nonces, leaderboard cache) ===
+# Create with:
+#   wrangler kv:namespace create TRACKER_CACHE
+[[kv_namespaces]]
+binding = "TRACKER_CACHE"
+id = "REPLACE_WITH_KV_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_ID"
+
+# === Cron triggers (max 5 on free tier; we use 4) ===
+
+# 05:00 Asia/Dhaka = 23:00 UTC the day before
+[triggers]
+crons = [
+  "0 23 * * *",  # DAILY_PLAN: generate daily plans for all uids
+  "0 * * * *",   # LEADERBOARD_ROLLUP: hourly roll-up
+  "0 0 * * *",   # BATCH_STATUS: daily batch status recompute
+  "30 * * * *",  # NONCE_AND_REMINDER: emit nonces + send revision reminders
+]
+
+# === Secrets (NOT committed) ===
+# Set with `wrangler secret put NAME`:
+#   FIREBASE_ACCESS_TOKEN   — pre-minted service-account access token
+#                             (rotated by external cron every ~60 min)
+#
+# Public Firebase config (NOT secret) is read by the client from
+# apps/web/.env.production.example — VITE_FIREBASE_* values.
+
+# === Routes ===
+# Optional: bind to a custom domain (e.g. api.hsc-cracker.com).
+# routes = [{ pattern = "api.hsc-cracker.com/*", custom_domain = true }]
