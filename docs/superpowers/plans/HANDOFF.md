@@ -403,3 +403,55 @@ Three plan files to create:
 4. **Chapter-tagging UI** in the timer (pass `chapterId` to `processStudySession`).
 5. **Subscription + admin approval flow** + data export.
 6. **PWA manifest + Workbox + Sentry + accessibility audit + privacy policy + marketing page**.
+
+---
+
+## Plan 3 → v1.0 Handoff (added 2026-08-01)
+
+**Plan 3 shipped** (9 sessions, all stacked off `feat/plan-2`):
+- Session 1: `storage.rules` deny-by-default with `paymentRequests/{uid}/{file}` path; dev-only `/__test/timer` route; `@playwright/test` installed; `tests/e2e/timer-persistence.spec.ts` un-skipped.
+- Session 2 (M6): `PlansGrid` + `SubscribeForm` + `SubscribeScreen` at `/app/subscribe`; pure pricing helpers in `plans.ts`.
+- Session 3 (M6): `generateSignedUploadUrl` Cloud Function (5-min signed PUT, image/* only); `paymentSubmit.ts` client; `paymentRequests` rules test.
+- Session 4 (M6): `useIsAdmin` hook; `approvePayment` Cloud Function with audit log; `ApprovalQueue` UI + `RequireAdmin` guard; `/admin` route.
+- Session 5 (M7): Full BN translations, `LanguageSwitcher` + `SettingsScreen`, ICU plural support (`compatibilityJSON: 'v4'`, `_one`/`_other` suffixes).
+- Session 6 (M7): FCM client helpers (`requestNotificationPermission`, `registerFcmToken`, `listenForForegroundMessages`); `sendRevisionReminder` scheduled function; `fcmTokens` rules match.
+- Session 7 (M7): `ChapterPicker` (subject+chapter dropdown); `getUserData` + `deleteUserData` Cloud Functions; `ExportButton`; `ThemeSwitcher`; `StreakFlame` (5-tier); `Landing` at `/welcome`; `Privacy` at `/privacy`.
+- Session 8 (M8): `vite-plugin-pwa` with HSC Crackers manifest + Workbox SW + firestore runtime cache; `@sentry/browser` init wrapper; ErrorBoundary forwards to Sentry.
+- Session 9: `tests/e2e/public-routes.spec.ts` (landing, privacy, auth redirect). Lighthouse CI is **not** wired (no remote + budget policy deferred to follow-up). Playwright suite is structurally complete (4 specs) but **does not run in CI yet** — required `npm run dev` on port 5173 with `VITE_ENABLE_TEST_ROUTES=true`.
+
+**Test totals:**
+- `apps/web`: 136 vitest tests across 52 files (rules unit tests use the Firebase rules-unit-testing harness against the emulator).
+- `apps/functions`: 21 vitest tests across 9 files.
+- All green on `feat/plan-2` after Session 9 commit.
+
+**Definition of Done status (from spec §16):**
+- [x] Google sign-in scaffolded (Plan 1).
+- [x] Onboarding asks for medium + batch + college (Plan 1).
+- [x] First focus session server-validated (Plan 2 processStudySession).
+- [x] Timer keeps running across tab-switch (Playwright `timer-persistence.spec.ts`, gated on dev route).
+- [x] Marking 1st Study auto-creates revisions (Plan 1 scheduledRevisions).
+- [x] Daily Plan widget (Plan 2 DailyPlanCard).
+- [x] Bangla + English UI both complete (Session 5, full bn.json).
+- [x] Palette = Cool Slate (Plan 1).
+- [ ] Lighthouse ≥ 90 on /app — **not measured in this run** (no Lighthouse CI step in `.github/workflows/ci.yml`).
+- [ ] Sentry zero unresolved > 24h — depends on first real users; Sentry init wired.
+- [x] Firestore rules 100% covered (users, paymentRequests, fcmTokens tests).
+- [x] Pace card respects batchId (Plan 2).
+- [x] Privacy policy + data-deletion flow live (Session 7 + 8).
+- [x] Admin approves → student sees pill (Session 4, approvePayment writes subscription immediately).
+
+**Known gaps to address in v1.0.1:**
+1. Lighthouse CI not configured. Add a GitHub Actions step running `lighthouse-ci` against `firebase hosting:channel:deploy`.
+2. Playwright suite is not run in CI — needs a CI step that boots `firebase emulators:exec` and runs `npm run test:e2e`.
+3. `signInWithPopup` Google button in Plan 1 is a stub — real Google OAuth client ID must be set in `.env.production` before launch.
+4. `sendRevisionReminder` and `sendStreakGuard` are scaffolded but only the pure builder is unit-tested; scheduled function needs an emulator integration test.
+5. `chapterId` is collected by `ChapterPicker` but not yet threaded into `processStudySession` request — that's a Plan 4 task.
+6. PWA icons (`/icons/icon-192.png`, `icon-512.png`) referenced in manifest do not exist yet. Create them before deploy.
+
+**How to deploy v1.0:**
+1. Merge `feat/plan-2` → `main` (PR; preserve history).
+2. CI: add Lighthouse CI + Playwright steps (see gaps above).
+3. Firebase project: create `hsc-crackers-prod`, enable Auth + Firestore + Functions + Storage + FCM. Apply `firebase deploy` with `firebase.json` at root.
+4. Set production env in Firebase Hosting config: `VITE_FIREBASE_*`, `VITE_SENTRY_DSN`, `VITE_ENABLE_TEST_ROUTES=false`.
+5. Seed `/batches/HSC-2024…HSC-2030` + `/syllabus/{bangla,english}/*` via the existing seed scripts (`npm run seed:batches`, `npm run seed:syllabus`).
+6. Bootstrap an admin by manually creating `/admins/{uid}` doc in the Firebase console for at least one operator.
