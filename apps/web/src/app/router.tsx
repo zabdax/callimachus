@@ -8,6 +8,7 @@ import { SyllabusMap } from '@/features/syllabus/SyllabusMap';
 import { TasksScreen } from '@/features/tasks/TasksScreen';
 import { StudyScreen } from '@/features/timer/StudyScreen';
 import { TestTimerScreen } from '@/features/timer/TestTimerScreen';
+import { SubscribeScreen } from '@/features/subscription/SubscribeScreen';
 import { RequireAuth, RequireProfile } from './guards';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: 'syllabus', element: <SyllabusMap medium="bangla" /> },
       { path: 'tasks', element: <TasksScreen /> },
       { path: 'study', element: <StudyScreenWithUid /> },
+      { path: 'subscribe', element: <SubscribeScreen /> },
     ],
   },
   {
