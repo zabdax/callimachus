@@ -1,3 +1,23 @@
+// storage.rules — kept as an OPTIONAL alternative for anyone who prefers
+// Firebase Storage over Cloudflare R2.
+//
+// v1.0 used Firebase Storage + signed-URL upload. v2.0 (Plan 4) migrates
+// to Cloudflare R2; the bucket policy that replaces this file lives at
+// /r2-bucket-policy.json. Both options enforce the same constraints:
+//
+//   - Deny by default.
+//   - Allow owner-scoped reads on paymentRequests/{uid}/*.
+//   - Allow owner-scoped PUT only with image/* content type.
+//
+// To use this Firebase Storage config instead of R2, also uncomment
+// the `storage` block in /firebase.json and revert
+// /apps/workers/src/handlers/generateSignedUploadUrl.ts to call
+// `admin.storage().bucket().file(path).getSignedUrl(...)`.
+//
+// This file is NOT deployed by the default v2.0 pipeline. The deploy
+// script (`scripts/deploy.mjs`) ignores it; deploy-r2.mjs applies
+// /r2-bucket-policy.json instead.
+
 rules_version = '2';
 service firebase.storage {
   match /{path=**} {
