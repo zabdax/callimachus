@@ -11,5 +11,6 @@
     ]
   },
   "firestore": { "rules": "firestore.rules" },
+  "storage": { "rules": "storage.rules" },
   "functions": [{ "source": "apps/functions", "codebase": "default", "runtime": "nodejs20" }]
 }
