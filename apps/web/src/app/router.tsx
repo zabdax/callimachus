@@ -7,7 +7,9 @@ import { Overview } from '@/features/home/Overview';
 import { SyllabusMap } from '@/features/syllabus/SyllabusMap';
 import { TasksScreen } from '@/features/tasks/TasksScreen';
 import { StudyScreen } from '@/features/timer/StudyScreen';
+import { TestTimerScreen } from '@/features/timer/TestTimerScreen';
 import { RequireAuth, RequireProfile } from './guards';
+import { useAuth } from '@/features/auth/AuthContext';
 
 const router = createBrowserRouter([
   { path: '/sign-in', element: <SignInScreen /> },
@@ -35,9 +37,12 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
   },
+  // Dev-only route. Only mounted when VITE_ENABLE_TEST_ROUTES is set.
+  // Production builds (no env) never include it.
+  ...(import.meta.env.VITE_ENABLE_TEST_ROUTES === 'true'
+    ? [{ path: '/__test/timer', element: <TestTimerScreen /> }]
+    : []),
 ]);
-
-import { useAuth } from '@/features/auth/AuthContext';
 
 function StudyScreenWithUid() {
   const { user } = useAuth();
