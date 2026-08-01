@@ -8,6 +8,8 @@ if (!i18n.isInitialized) {
     resources: { en: { translation: en }, bn: { translation: bn } },
     lng: 'en',
     fallbackLng: 'en',
+    // v4 enables i18next's plurals + ICU-style placeholders.
+    compatibilityJSON: 'v4',
     interpolation: { escapeValue: false },
     saveMissing: true,
     missingKeyHandler: (_lng, _ns, key) => console.warn(`[i18n] missing ${key}`),

@@ -11,6 +11,7 @@ import { TestTimerScreen } from '@/features/timer/TestTimerScreen';
 import { SubscribeScreen } from '@/features/subscription/SubscribeScreen';
 import { ApprovalQueue } from '@/features/admin/ApprovalQueue';
 import { RequireAdmin } from '@/features/admin/RequireAdmin';
+import { SettingsScreen } from '@/features/settings/SettingsScreen';
 import { RequireAuth, RequireProfile } from './guards';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: 'tasks', element: <TasksScreen /> },
       { path: 'study', element: <StudyScreenWithUid /> },
       { path: 'subscribe', element: <SubscribeScreen /> },
+      { path: 'settings', element: <SettingsScreen /> },
     ],
   },
   {
