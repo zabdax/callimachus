@@ -16,6 +16,24 @@ export type SessionDoc = {
   chapterId: string | null;
 };
 
+export type PaymentRequestDoc = {
+  uid: string;
+  planId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  trxId: string;
+  storagePath?: string;
+  createdAt?: unknown;
+  approvedAt?: number;
+  approvedBy?: string;
+};
+
+export type SubscriptionDoc = {
+  status: 'active' | 'inactive' | 'expired';
+  plan: string;
+  expiresAt: number;
+  paymentRequestId: string;
+};
+
 /**
  * A small abstract Firestore adapter that the handlers depend on.
  * Production code injects the Firebase Admin SDK client; tests inject
@@ -28,6 +46,9 @@ export interface FirestoreAdapter {
   incrementDailyLeaderboard(date: string, durationSec: number, uid: string): Promise<void>;
   incrementChapterStat(uid: string, chapterId: string, durationSec: number): Promise<void>;
   setActiveSession(uid: string, serverStartTs: number, clientStartTs: number): Promise<void>;
+  getPaymentRequest(id: string): Promise<{ uid: string; planId: string } | null>;
+  setUserSubscription(uid: string, sub: SubscriptionDoc): Promise<void>;
+  markPaymentRequestApproved(id: string, by: string, atMs: number): Promise<void>;
 }
 
 /** A no-op adapter for tests. Each method must be overridable. */
@@ -48,6 +69,15 @@ export class StubFirestore implements FirestoreAdapter {
     return Promise.resolve();
   }
   setActiveSession(_uid: string, _serverTs: number, _clientTs: number): Promise<void> {
+    return Promise.resolve();
+  }
+  getPaymentRequest(_id: string): Promise<{ uid: string; planId: string } | null> {
+    return Promise.resolve(null);
+  }
+  setUserSubscription(_uid: string, _sub: SubscriptionDoc): Promise<void> {
+    return Promise.resolve();
+  }
+  markPaymentRequestApproved(_id: string, _by: string, _at: number): Promise<void> {
     return Promise.resolve();
   }
 }

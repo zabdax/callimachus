@@ -109,6 +109,32 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
         },
       ]);
     },
+
+    async getPaymentRequest(id: string): Promise<{ uid: string; planId: string } | null> {
+      const doc = (await getDoc(`paymentRequests/${id}`)) as { fields?: Record<string, { stringValue?: string }> } | null;
+      if (!doc || !doc.fields) return null;
+      const uid = doc.fields['uid']?.stringValue;
+      const planId = doc.fields['planId']?.stringValue;
+      if (!uid || !planId) return null;
+      return { uid, planId };
+    },
+
+    async setUserSubscription(uid: string, sub: Record<string, unknown>): Promise<void> {
+      await commit([{ path: `users/${uid}`, data: { subscription: sub, updatedAt: { timestampValue: new Date().toISOString() } } }]);
+    },
+
+    async markPaymentRequestApproved(id: string, by: string, atMs: number): Promise<void> {
+      await commit([
+        {
+          path: `paymentRequests/${id}`,
+          data: {
+            status: 'approved',
+            approvedAt: atMs,
+            approvedBy: by,
+          },
+        },
+      ]);
+    },
   };
 }
 
