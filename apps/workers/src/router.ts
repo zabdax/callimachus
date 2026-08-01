@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { requireAuth } from './auth.js';
 
 /**
  * Hono router for the Callimachus Worker. Plan 4 / session 1 ships only
@@ -17,6 +18,23 @@ app.get('/api/echo', (c) =>
     service: 'callimachus-workers',
     ts: Date.now(),
   }),
+);
+
+// Session 2: protected `/api/private/me` returns the decoded uid + admin
+// claim after Firebase ID-token verification. Project id is read from
+// the FIREBASE_PROJECT_ID environment variable in production (configured
+// in wrangler.toml under [vars]); tests inject a placeholder.
+declare const process: { env: Record<string, string | undefined> };
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'test-project';
+
+app.get(
+  '/api/private/me',
+  requireAuth(PROJECT_ID),
+  (c) => {
+    const uid = c.get('uid');
+    const claims = c.get('claims');
+    return c.json({ ok: true, uid, admin: !!claims?.admin });
+  },
 );
 
 // Catch-all 404 in JSON shape so client error handling is consistent.
