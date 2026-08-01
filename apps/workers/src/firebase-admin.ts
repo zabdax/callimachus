@@ -1,4 +1,6 @@
-import type { FirestoreAdapter, SessionDoc } from './db';
+import type { FirestoreAdapter, SessionDoc, PaymentRequestDoc, SubscriptionDoc } from './db';
+import type { CronAdapters } from './crons';
+import type { BatchState } from './handlers/batchStatus';
 
 /**
  * Firestore adapter that talks to Firestore over its REST API
@@ -16,12 +18,11 @@ import type { FirestoreAdapter, SessionDoc } from './db';
 export type FirestoreCreds = { projectId: string; accessToken: string };
 
 /**
- * In Workers, `accessToken` comes from the GCP service-account JWT
- * minted by your bindings. This helper accepts a pre-minted token; the
- * actual minting (e.g. via @cloudflare/workers-firestore or jose with
- * a service-account key) is session 8 work.
+ * Build a Firestore REST client bound to the given credentials. The
+ * helper functions are returned as a small object so the cron adapters
+ * below can reuse them without rebuilding.
  */
-export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
+function makeClient(creds: FirestoreCreds) {
   const base = `https://firestore.googleapis.com/v1/projects/${creds.projectId}/databases/(default)/documents`;
   const auth = { Authorization: `Bearer ${creds.accessToken}` };
 
@@ -42,20 +43,34 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     return (await res.json()) as { documents?: { name: string; fields: Record<string, unknown> }[] };
   }
 
-  async function commit(writes: { path: string; data: SessionDoc | Record<string, unknown> }[]) {
+  async function commit(writes: { path: string; data: Record<string, unknown> }[]) {
     const res = await fetch(`${base}:commit`, {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ writes: writes.map((w) => ({
-        update: { name: `${base}/${w.path}`, fields: toFirestoreFields(w.data) },
-      })) }),
+      body: JSON.stringify({
+        writes: writes.map((w) => ({
+          update: { name: `${base}/${w.path}`, fields: toFirestoreFields(w.data) },
+        })),
+      }),
     });
     if (!res.ok) throw new Error(`firestore COMMIT ${res.status}: ${await res.text()}`);
   }
 
+  return { base, auth, getDoc, listCollection, commit };
+}
+
+/**
+ * In Workers, `accessToken` comes from the GCP service-account JWT
+ * minted by your bindings. This helper accepts a pre-minted token; the
+ * actual minting (e.g. via @cloudflare/workers-firestore or jose with
+ * a service-account key) is session 8 work.
+ */
+export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
+  const client = makeClient(creds);
+
   return {
     async getLastSessionEndedAt(uid: string): Promise<number | null> {
-      const out = await listCollection(`users/${uid}/sessions`, {
+      const out = await client.listCollection(`users/${uid}/sessions`, {
         'orderBy': 'endedAtMs desc',
         'pageSize': '1',
       });
@@ -65,9 +80,7 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     },
 
     async countTodaySessions(uid: string, date: string): Promise<number> {
-      // The REST API doesn't have a count endpoint — fall back to listing.
-      // For a 10-per-day cap with at most a few hundred records, this is fine.
-      const out = await listCollection(`users/${uid}/sessions`, {
+      const out = await client.listCollection(`users/${uid}/sessions`, {
         'where': `date == "${date}"`,
         'pageSize': '1000',
       });
@@ -75,12 +88,11 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     },
 
     async writeSession(uid: string, id: string, doc: SessionDoc): Promise<void> {
-      await commit([{ path: `users/${uid}/sessions/${id}`, data: doc as unknown as Record<string, unknown> }]);
+      await client.commit([{ path: `users/${uid}/sessions/${id}`, data: doc as unknown as Record<string, unknown> }]);
     },
 
     async incrementDailyLeaderboard(date: string, durationSec: number, uid: string): Promise<void> {
-      // Two writes: parent doc + per-user subdoc.
-      await commit([
+      await client.commit([
         {
           path: `analytics/leaderboard_daily/${date}`,
           data: { totalDurationSec: { increment: durationSec }, activeUserCount: { increment: 0 } },
@@ -93,7 +105,7 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     },
 
     async incrementChapterStat(uid: string, chapterId: string, durationSec: number): Promise<void> {
-      await commit([
+      await client.commit([
         {
           path: `users/${uid}/chapterStats/${chapterId}`,
           data: { totalSec: { increment: durationSec }, lastStudiedAt: { timestampValue: new Date().toISOString() } },
@@ -102,7 +114,7 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     },
 
     async setActiveSession(uid: string, serverStartTs: number, clientStartTs: number): Promise<void> {
-      await commit([
+      await client.commit([
         {
           path: `users/${uid}/activeSession/current`,
           data: { serverStartTs, clientStartTs, updatedAt: { timestampValue: new Date().toISOString() } },
@@ -111,7 +123,7 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     },
 
     async getPaymentRequest(id: string): Promise<{ uid: string; planId: string } | null> {
-      const doc = (await getDoc(`paymentRequests/${id}`)) as { fields?: Record<string, { stringValue?: string }> } | null;
+      const doc = (await client.getDoc(`paymentRequests/${id}`)) as { fields?: Record<string, { stringValue?: string }> } | null;
       if (!doc || !doc.fields) return null;
       const uid = doc.fields['uid']?.stringValue;
       const planId = doc.fields['planId']?.stringValue;
@@ -119,12 +131,12 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
       return { uid, planId };
     },
 
-    async setUserSubscription(uid: string, sub: Record<string, unknown>): Promise<void> {
-      await commit([{ path: `users/${uid}`, data: { subscription: sub, updatedAt: { timestampValue: new Date().toISOString() } } }]);
+    async setUserSubscription(uid: string, sub: SubscriptionDoc): Promise<void> {
+      await client.commit([{ path: `users/${uid}`, data: { subscription: sub, updatedAt: { timestampValue: new Date().toISOString() } } }]);
     },
 
     async markPaymentRequestApproved(id: string, by: string, atMs: number): Promise<void> {
-      await commit([
+      await client.commit([
         {
           path: `paymentRequests/${id}`,
           data: {
@@ -137,6 +149,91 @@ export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
     },
   };
 }
+
+/**
+ * Cron adapters: reuse the same REST client. The nonces / push side
+ * lives in src/kv.ts and src/push.ts (session 8). For now they are
+ * stubs that return no-ops.
+ */
+export const cronAdapters: CronAdapters = (() => {
+  const client = makeClient({
+    projectId:
+      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+        ?.FIREBASE_PROJECT_ID ?? 'test-project',
+    accessToken:
+      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+        ?.FIREBASE_ACCESS_TOKEN ?? 'test-token',
+  });
+
+  return {
+    now: () => Date.now(),
+    async listBatches() {
+      const out = await client.listCollection(`batches`, { pageSize: '100' });
+      return (out.documents ?? []).map((d: { name: string; fields: Record<string, unknown> }) => {
+        const f = d.fields;
+        const ts = (k: string) => {
+          const v = f[k] as { timestampValue?: string } | undefined;
+          return v?.timestampValue ? new Date(v.timestampValue).getTime() : 0;
+        };
+        return {
+          id: d.name.split('/').pop() ?? '',
+          collegeStart: ts('collegeStart'),
+          examStart: ts('examStart'),
+          examEnd: ts('examEnd'),
+        };
+      });
+    },
+    async writeBatchStatus(id, state: BatchState) {
+      await client.commit([
+        { path: `batches/${id}`, data: { status: { stringValue: state.kind }, updatedAt: { timestampValue: new Date().toISOString() } } },
+      ]);
+    },
+    async listTodaySessions(date: string) {
+      const out = await client.listCollection(`analytics/leaderboard_daily/${date}/users`, { pageSize: '1000' });
+      return (out.documents ?? []).map((d: { name: string; fields: Record<string, unknown> }) => {
+        const dur = Number((d.fields['durationSec'] as { integerValue?: string } | undefined)?.integerValue ?? 0);
+        const uid = d.name.split('/').pop() ?? '';
+        return { uid, durationSec: dur };
+      });
+    },
+    async writeMonthlyLeaderboard(monthKey: string, total: number, users: number) {
+      await client.commit([
+        {
+          path: `analytics/leaderboard_monthly/${monthKey}`,
+          data: { totalDurationSec: { integerValue: String(total) }, activeUserCount: { integerValue: String(users) } },
+        },
+      ]);
+    },
+    async listActiveSessions() {
+      return [];
+    },
+    async writeNonce(_uid, _nonceId, _expiresAt) {
+      return;
+    },
+    async listUpcomingTasksForReminders(_now, _oneHourLater) {
+      return [];
+    },
+    async sendPush(_token, _title, _body, _data) {
+      return;
+    },
+    async listFcmTokens(_uid) {
+      return [];
+    },
+    async listPendingTasksForDailyPlan(_uid, _now) {
+      return [];
+    },
+    async writeDailyPlan(_uid, _blocks) {
+      return;
+    },
+    async listAllUids() {
+      const out = await client.listCollection(`users`, { pageSize: '1000' });
+      return (out.documents ?? []).map((d: { name: string }) => d.name.split('/').pop() ?? '').filter(Boolean);
+    },
+  };
+})();
+
+// Avoid TS unused-warnings on the type-only imports.
+export type { SessionDoc, PaymentRequestDoc, SubscriptionDoc };
 
 /* ---------- internal helpers ---------- */
 
