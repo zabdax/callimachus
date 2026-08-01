@@ -1,0 +1,16 @@
+{
+  "name": "@hsc-tracker/scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "bootstrap-admin": "node bootstrap-admin.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
