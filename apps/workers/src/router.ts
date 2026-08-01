@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { requireAuth, requireAdmin, type AuthVariables } from './auth.js';
 import { processStudySession } from './handlers/processStudySession.js';
 import { sessionStart } from './handlers/sessionStart.js';
-import { generateSignedUploadUrl } from './handlers/generateSignedUploadUrl.js';
 import { approvePayment } from './handlers/approvePayment.js';
 import { requireUid, WorkerError } from './db.js';
 
@@ -78,11 +77,9 @@ app.post('/api/processStudySession', requireAuth(PROJECT_ID), async (c) => {
   }
 });
 
-// Session 4: signed uploads (R2) + admin approval.
-async function getR2() {
-  const mod = await import('./r2.js');
-  return mod.r2Signer;
-}
+// Session 4 (revised): admin approval only.
+// Per Plan 4 no-screenshot decision (R2 skipped), the signed-upload
+// endpoint is removed. Admins review bKash TrxIDs via WhatsApp.
 
 async function getAdmins() {
   const mod = await import('./firebase-admin.js');
@@ -116,23 +113,6 @@ async function getAudit() {
     },
   };
 }
-
-app.post('/api/generateSignedUploadUrl', requireAuth(PROJECT_ID), async (c) => {
-  const claims = c.get('claims');
-  const uid = requireUid(claims);
-  try {
-    const body = (await c.req.json().catch(() => ({}))) as {
-      data?: { contentType?: string; fileExt?: string };
-    };
-    const contentType = body.data?.contentType ?? '';
-    const fileExt = body.data?.fileExt;
-    const out = await generateSignedUploadUrl(uid, { contentType, fileExt }, await getR2());
-    return c.json({ data: out });
-  } catch (e) {
-    const w = e instanceof WorkerError ? e.toResponse() : { status: 500, body: { ok: false, error: 'internal', message: (e as Error).message } };
-    return c.json(w.body, w.status as 500);
-  }
-});
 
 app.post('/api/approvePayment', requireAuth(PROJECT_ID), requireAdmin(), async (c) => {
   const claims = c.get('claims');

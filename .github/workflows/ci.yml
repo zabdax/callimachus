@@ -139,4 +139,4 @@ jobs:
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: production
           VITE_ENABLE_TEST_ROUTES: 'false'
-        run: node scripts/deploy-r2.mjs
+        run: node scripts/deploy.mjs
