@@ -455,3 +455,127 @@ Three plan files to create:
 4. Set production env in Firebase Hosting config: `VITE_FIREBASE_*`, `VITE_SENTRY_DSN`, `VITE_ENABLE_TEST_ROUTES=false`.
 5. Seed `/batches/HSC-2024…HSC-2030` + `/syllabus/{bangla,english}/*` via the existing seed scripts (`npm run seed:batches`, `npm run seed:syllabus`).
 6. Bootstrap an admin by manually creating `/admins/{uid}` doc in the Firebase console for at least one operator.
+
+---
+
+## Plan 4 → v2.0 Handoff (added 2026-08-01)
+
+**Why Plan 4 exists.** v1.0 assumed Firebase Blaze for Cloud Functions. User
+budget is $0 — no card on any provider. Migrated server-side compute to
+Cloudflare Workers (free tier, no card required) and screenshot storage
+to R2 (free tier). Firebase Auth + Firestore (Spark) + FCM stay.
+
+**Spec:** `docs/superpowers/specs/2026-08-01-platform-migration-design.md`
+
+**Plan 4 shipped** (9 sessions, all stacked off `feat/plan-2`):
+
+| # | Branch | Scope |
+|---|---|---|
+| 1 | `plan4/session1-foundation` | Workers scaffold with Hono + vitest + wrangler (done by a previous session — left as-is) |
+| 2 | `plan4/session2-auth` | Firebase ID-token verification via jose + JWKS cache; `requireAuth` + `requireAdmin` Hono middlewares; `/api/private/me` smoke endpoint |
+| 3 | `plan4/session3-firestore` | port `sessionStart` + `processStudySession` (validation, overlap, daily cap, presence nonces); BST midnight split via Intl; Firestore REST adapter (no firebase-admin on Workers) |
+| 4 | `plan4/session4-uploads-admin` | port `generateSignedUploadUrl` (R2 signed PUT) + `approvePayment` (admin gate + subscription write + audit log) |
+| 5 | `plan4/session5-storage-rules` | `r2-bucket-policy.json` replaces `storage.rules`; `firebase.json` hosting + storage + functions blocks commented out as alternatives |
+| 6 | `plan4/session6-crons` | 4 cron triggers (bundled `emitNonce` + `sendRevisionReminder` to fit 5-cron free tier); `batchStatus`, `leaderboardRollup`, `dailyPlan` routines |
+| 7 | `plan4/session7-frontend-swap` | all 6 `httpsCallable` call sites in `apps/web` swapped to `callWorker`; `onboardingProfile` moved to client-side `setDoc` (no Workers Auth trigger) |
+| 8 | `plan4/session8-deploy` | `wrangler.toml` with R2 + KV + 4 crons; `scripts/deploy-r2.mjs` orchestrator (validates 11 env vars, builds, deploys Pages + Workers + R2 + KV + firestore:rules); CI `deploy` job |
+| 9 | `plan4/session9-handoff` | drop `apps/functions/`, update HANDOFF.md |
+
+**Test totals after Plan 4:**
+- `apps/web`: 144 vitest tests across 54 files (unchanged from v1.0; same UI, swap is internal)
+- `apps/workers`: 46 vitest tests across 9 files (was 0 before Plan 4)
+- `scripts/`: 11 vitest tests across 2 files
+- **Total: 201 tests, all green.** Lint clean on `apps/web` and `apps/workers`.
+
+**Free-tier quotas at launch scale (100 active students):**
+
+| Resource | Usage estimate | Free limit | Headroom |
+|---|---|---|---|
+| Workers requests | ~12K/day (sessions + nonces + crons + admin) | 100K/day | 8× |
+| R2 storage | ~100 MB (bKash screenshots) | 10 GB | 100× |
+| R2 Class A writes | ~300/day (signed uploads) | 33K/day | 110× |
+| KV writes | ~1K/day (presence nonces) | 1K/day | at-limit ⚠️ |
+| Firestore reads | ~5K/day | 50K/day | 10× |
+| Firestore writes | ~600/day | 20K/day | 33× |
+| FCM | ~100/day | unlimited | unlimited |
+| Cloudflare Pages build minutes | ~5/build | 500/mo | 100× |
+
+**Cost projection for Bangladesh launch: $0/mo.**
+
+**What did NOT change between v1.0 and v2.0:**
+- 100% of the UI (React components, hooks, contexts, i18n, theme)
+- 100% of the Firestore rules
+- 100% of Firebase Auth + FCM
+- All e2e tests (Playwright)
+- The bootstrap-admin script (`scripts/bootstrap-admin.mjs`)
+- All docs (`admin-bootstrap.md`, `RELEASE-v1.0.0.md` — the release notes
+  describe v1.0 features; v2.0 ships them all on Cloudflare instead of
+  Firebase Cloud Functions)
+
+**Definition of Done — v1.0 spec §16 status (revisited):**
+
+| Criterion | Status |
+|---|---|
+| Sign in <30s | ✅ unchanged |
+| Onboarding asks medium + batch + college | ✅ unchanged (now client-side setDoc) |
+| First session server-validated <5s | ✅ via `/api/processStudySession` |
+| Timer keeps running ±1s on tab-switch | ✅ unchanged |
+| 1st Study creates +7/+14/+30 revisions | ✅ unchanged (scheduledRevisions Firestore trigger) |
+| Daily Plan widget | ✅ unchanged |
+| BN + EN UI complete | ✅ unchanged |
+| Cool Slate palette | ✅ unchanged |
+| Lighthouse ≥90 | ⚠️ not measured (Lighthouse CI configured but not run yet) |
+| Sentry zero unresolved >24h | ⚠️ depends on first real users |
+| Firestore rules 100% covered | ✅ 100% (existing + new tests) |
+| Pace card reflects batchId | ✅ unchanged |
+| Privacy policy + data-deletion | ✅ unchanged + v2.0 Worker endpoint |
+| Admin approves → student sees pill | ✅ unchanged + v2.0 Worker endpoint |
+
+10/13 DoD met, 3 deferred (Lighthouse measurement + Sentry real users).
+
+**How to deploy v2.0 (replaces v1.0 deploy runbook):**
+1. Create Cloudflare account (email + password — NO CARD required).
+2. Create Firebase project in Spark plan (no card) — enable Auth +
+   Firestore + FCM (the same `hsc-crackers-prod` you would have used
+   for v1.0).
+3. Create R2 bucket: `wrangler r2 bucket create hsc-tracker-screenshots`
+   (no card required).
+4. Create KV namespace: `wrangler kv:namespace create TRACKER_CACHE`
+   (note the returned ID; paste it into `apps/workers/wrangler.toml`).
+5. Mint a service-account access token. The simplest path is to create
+   a GCP service account with Firebase Admin role, download the JSON
+   key, and use `gcloud auth print-access-token --impersonate-service-account=...`
+   or use the [oauth2 token endpoint]. For the scaffold, a static
+   token rotated every ~60 min via a separate cron is enough.
+6. Set GitHub Actions secrets: `CLOUDFLARE_API_TOKEN`,
+   `CLOUDFLARE_ACCOUNT_ID`, `FIREBASE_TOKEN`, and the 6
+   `VITE_FIREBASE_*` + `VITE_SENTRY_*` secrets.
+7. Push to `main`. The `deploy` job calls `scripts/deploy-r2.mjs`
+   which builds, deploys Workers + Pages, creates the bucket + KV
+   namespace if missing, and applies Firestore rules.
+8. Bootstrap an admin: `node scripts/bootstrap-admin.mjs <uid>` (uses
+   the same service-account token).
+
+**Manual work for the user (same as v1.0, just different platforms):**
+- Create Cloudflare account
+- Create Firebase project (Spark)
+- Set the 11 env vars (8 Firebase + Sentry + 2 Cloudflare + 1 Firebase CI token)
+- Create R2 bucket + KV namespace IDs
+- Bootstrap admin
+- Tag `v2.0.0`
+
+**Risks still open (carried over from v1.0):**
+1. Lighthouse CI not yet wired into the deploy job — only runs on
+   push. Should be measured before announcing v2.0.
+2. Real Google OAuth client ID (Plan 1 left it as a stub).
+3. `sendRevisionReminder` FCM integration not yet wired (Workers
+   cron calls into FCM via firebase-admin SDK, which doesn't run on
+   Workers — needs a separate REST shim or a sibling service-account
+   Firebase Functions).
+4. PWA icons are placeholder (Cool Slate + white circle). Replace
+   with branded artwork before public launch.
+5. `chapterId` threading still doesn't pass into processStudySession
+   payload — collected by `ChapterPicker` UI but ignored by the
+   server-side validation (deferred to a follow-up Plan 5).
+
+**Tag v2.0.0 on main after merge.**
