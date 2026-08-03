@@ -1,18 +1,16 @@
-# wrangler.toml for HSC Crackers Workers (Plan 4, no-screenshot revision).
+# wrangler.toml for HSC Tracker Workers (Plan 4, no-screenshot revision).
 #
 # Per the no-screenshot decision, R2 is intentionally NOT bound. The
-# bKash approval flow goes through TrxID-only: the user submits a
-# TrxID via the form, the admin reviews it via WhatsApp (or email),
-# and approves in /admin/approvals. See HANDOFF.md §R2 skipped.
+# bKash approval flow goes through TrxID-only: user submits a TrxID,
+# admin reviews via WhatsApp, approves in /admin/approvals.
 #
-# The KV namespace is REQUIRED (presence nonces + leaderboard cache).
-# Set the IDs below after running:
-#   wrangler kv:namespace create TRACKER_CACHE
+# KV namespace is REQUIRED (presence nonces + leaderboard cache).
+# Created via `wrangler kv namespace create TRACKER_CACHE`.
 #
 # 5 cron triggers is the free-tier maximum — we use 4 by bundling
 # emitNonce + sendRevisionReminder into one (both hourly at :30).
 
-name = "hsc-crackers-workers"
+name = "hsc-tracker-ef2b5-workers"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
@@ -23,17 +21,15 @@ enabled = true
 # === Vars (non-secret env) ===
 [vars]
 ENVIRONMENT = "production"
-# Firebase project id — also set as a secret if you want server-side
-# reads to use the secret (some workflows prefer that).
-FIREBASE_PROJECT_ID = "REPLACE_WITH_FIREBASE_PROJECT_ID"
-# Public Workers origin — the web app calls `${WORKERS_BASE}/api/<name>`.
-WORKERS_BASE = "https://hsc-crackers-workers.zubayer-hasanshaad.workers.dev"
+FIREBASE_PROJECT_ID = "hsc-tracker-ef2b5"
+# Public Workers origin — the web app calls ${WORKERS_BASE}/api/<name>.
+WORKERS_BASE = "https://hsc-tracker-ef2b5-workers.byzubooo.workers.dev"
 
 # === KV namespace for ephemeral state (presence nonces, leaderboard cache) ===
 [[kv_namespaces]]
 binding = "TRACKER_CACHE"
-id = "REPLACE_WITH_KV_ID"
-preview_id = "REPLACE_WITH_PREVIEW_KV_ID"
+id = "15aae3858ad64d2fb5607f0121a74d40"
+preview_id = "390366ab85534847af33afa336824c86"
 
 # === Cron triggers (max 5 on free tier; we use 4) ===
 [triggers]
@@ -52,5 +48,5 @@ crons = [
 # apps/web/.env.production — VITE_FIREBASE_* values.
 
 # === Routes ===
-# Optional: bind to a custom domain (e.g. api.hsc-cracker.com).
-# routes = [{ pattern = "api.hsc-cracker.com/*", custom_domain = true }]
+# Optional: bind to a custom domain (e.g. api.hsc-tracker.com).
+# routes = [{ pattern = "api.hsc-tracker.com/*", custom_domain = true }]

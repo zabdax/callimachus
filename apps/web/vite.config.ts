@@ -24,6 +24,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Critical: Firebase Auth returns to /__/auth/handler?code=... after
+        // signInWithRedirect. If the SW serves the cached index.html for that
+        // navigation (default navigateFallback), Firebase never sees the auth
+        // code. The denylist below excludes those callbacks from the fallback.
+        navigateFallbackDenylist: [/^\/__\/auth\//],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
