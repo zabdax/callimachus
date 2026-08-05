@@ -8,7 +8,7 @@ import type { Stage } from './nextTypeFor';
 export function useSyllabus(uid: string, medium: 'bangla' | 'english') {
   const qc = useQueryClient();
   const key = ['syllabus', uid, medium] as const;
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, error } = useQuery({
     queryKey: key,
     queryFn: () => loadAllSyllabus(uid, medium),
     enabled: !!uid,
@@ -39,6 +39,7 @@ export function useSyllabus(uid: string, medium: 'bangla' | 'english') {
     subjects: data?.subjects ?? [],
     chapters: data?.chapters ?? {},
     loading,
+    error,
     toggle: toggle.mutateAsync,
   };
 }

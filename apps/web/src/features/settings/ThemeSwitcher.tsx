@@ -17,7 +17,7 @@ export function ThemeSwitcher() {
         aria-label="Theme"
         value={theme}
         onChange={(e) => setTheme(e.target.value as Theme)}
-        className="rounded-md border border-slate-300 px-2 py-1 bg-white"
+        className="rounded-md border border-surface-2 bg-surface px-2 py-1 text-text"
       >
         {OPTIONS.map((o) => (
           <option key={o} value={o}>

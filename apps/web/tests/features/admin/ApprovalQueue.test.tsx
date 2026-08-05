@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('@/features/admin/useIsAdmin', () => ({
@@ -12,21 +12,23 @@ vi.mock('@/features/admin/fetchPendingRequests', () => ({
   ]),
 }));
 
-const httpsCallableMock = vi.fn().mockResolvedValue({ data: { ok: true } });
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
-vi.mock('firebase/functions', () => ({
-  getFunctions: vi.fn(() => ({ _fn: true })),
-  httpsCallable: (...a: unknown[]) => httpsCallableMock(...a),
+vi.mock('firebase/auth', () => ({
+  getAuth: () => ({ currentUser: { getIdToken: async () => 't' } }),
 }));
 
-vi.mock('@/lib/firebase/client', () => ({
-  app: { _app: true },
-}));
+vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 import { ApprovalQueue } from '@/features/admin/ApprovalQueue';
-import { fetchPendingRequests } from '@/features/admin/fetchPendingRequests';
 
 describe('ApprovalQueue', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { ok: true } }) });
+  });
+
   it('renders a row for each pending request', async () => {
     render(<ApprovalQueue />);
     await waitFor(() => {
@@ -43,21 +45,14 @@ describe('ApprovalQueue', () => {
     expect(first).toBeDefined();
     fireEvent.click(first!);
     await waitFor(() => {
-      expect(httpsCallableMock).toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalled();
     });
   });
 
-  it('shows a forbidden message when user is not admin', async () => {
-    // Override useIsAdmin to return false for this test
-    vi.doMock('@/features/admin/useIsAdmin', () => ({
-      useIsAdmin: () => false,
-    }));
-    // Re-import would be heavy; instead we just rely on the fact that the
-    // mock above is the default and that the approval action is disabled
-    // server-side. The UI for non-admin is intentionally not implemented
-    // in this milestone; admins are gated via route + rules. So this test
-    // just verifies the component does not crash when no items exist.
-    (fetchPendingRequests as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+  it('renders an empty queue without erroring', async () => {
+    // Re-mock fetchPendingRequests to return []. Done by re-importing.
+    const mod = await import('@/features/admin/fetchPendingRequests');
+    (mod.fetchPendingRequests as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
     render(<ApprovalQueue />);
     await waitFor(() =>
       expect(screen.getByText(/no pending requests/i)).toBeInTheDocument(),

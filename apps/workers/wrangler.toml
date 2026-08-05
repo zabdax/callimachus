@@ -1,0 +1,54 @@
+# wrangler.toml for HSC Tracker Workers (Plan 4, no-screenshot revision).
+#
+# Per the no-screenshot decision, R2 is intentionally NOT bound. The
+# bKash approval flow goes through TrxID-only: user submits a TrxID,
+# admin reviews via WhatsApp, approves in /admin/approvals.
+#
+# KV namespace is REQUIRED (presence nonces + leaderboard cache).
+# Created via `wrangler kv namespace create TRACKER_CACHE`.
+#
+# 5 cron triggers is the free-tier maximum — we use 4 by bundling
+# emitNonce + sendRevisionReminder into one (both hourly at :30).
+
+name = "hsc-tracker-ef2b5-workers"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# === Vars (non-secret env) ===
+[vars]
+ENVIRONMENT = "production"
+FIREBASE_PROJECT_ID = "hsc-tracker-ef2b5"
+# Comma-separated browser origins allowed to call the API.
+ALLOWED_ORIGINS = "https://hsc-tracker.pages.dev,http://localhost:5173"
+# Public Workers origin — the web app calls ${WORKERS_BASE}/api/<name>.
+WORKERS_BASE = "https://hsc-tracker-ef2b5-workers.byzubooo.workers.dev"
+
+# === KV namespace for ephemeral state (presence nonces, leaderboard cache) ===
+[[kv_namespaces]]
+binding = "TRACKER_CACHE"
+id = "15aae3858ad64d2fb5607f0121a74d40"
+preview_id = "390366ab85534847af33afa336824c86"
+
+# === Cron triggers (max 5 on free tier; we use 4) ===
+[triggers]
+crons = [
+  "0 23 * * *",  # DAILY_PLAN: generate daily plans for all uids
+  "0 * * * *",   # LEADERBOARD_ROLLUP: hourly roll-up
+  "0 0 * * *",   # BATCH_STATUS: daily batch status recompute
+  "30 * * * *",  # NONCE_AND_REMINDER: emit nonces + send revision reminders
+]
+
+# === Secrets (NOT committed) — set with `wrangler secret put NAME` ===
+#   FIREBASE_ACCESS_TOKEN  — pre-minted service-account access token
+#                            (rotated by external cron every ~60 min)
+#
+# Public Firebase config (NOT secret) is read by the client from
+# apps/web/.env.production — VITE_FIREBASE_* values.
+
+# === Routes ===
+# Optional: bind to a custom domain (e.g. api.hsc-tracker.com).
+# routes = [{ pattern = "api.hsc-tracker.com/*", custom_domain = true }]

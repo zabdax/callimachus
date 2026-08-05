@@ -4,7 +4,6 @@ import type { PlanId } from './plans';
 export type SubscribeSubmit = (arg: {
   planId: PlanId;
   trxId: string;
-  file: File;
 }) => Promise<void>;
 
 type Props = {
@@ -14,16 +13,22 @@ type Props = {
   error: string | null;
 };
 
+/**
+ * Per Plan 4 no-screenshot decision: the admin reviews bKash TrxIDs
+ * directly (via WhatsApp / email) without a screenshot upload. The
+ * form only collects the TrxID + the chosen plan. See HANDOFF.md
+ * "R2 skipped" for context.
+ */
 export function SubscribeForm({ selectedPlanId, onSubmit, busy, error }: Props) {
   const [trxId, setTrxId] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-
-  const canSubmit = !!selectedPlanId && trxId.trim().length > 0 && !!file && !busy;
+  const normalizedTrxId = trxId.trim();
+  const validTrxId = /^[A-Za-z0-9_-]{4,64}$/.test(normalizedTrxId);
+  const canSubmit = !!selectedPlanId && validTrxId && !busy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !selectedPlanId || !file) return;
-    await onSubmit({ planId: selectedPlanId, trxId: trxId.trim(), file });
+    if (!canSubmit || !selectedPlanId) return;
+    await onSubmit({ planId: selectedPlanId, trxId: normalizedTrxId });
   };
 
   return (
@@ -41,21 +46,18 @@ export function SubscribeForm({ selectedPlanId, onSubmit, busy, error }: Props) 
           value={trxId}
           onChange={(e) => setTrxId(e.target.value)}
           required
-          className="rounded-md border border-slate-300 px-3 py-2"
+          className="rounded-md border border-surface-2 bg-surface px-3 py-2"
           placeholder="e.g. TRX123ABC"
+          minLength={4}
+          maxLength={64}
+          pattern="[A-Za-z0-9_-]+"
         />
+        {trxId && !validTrxId && <span className="text-xs text-danger">Use 4–64 letters, numbers, underscores, or hyphens.</span>}
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Payment screenshot</span>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          required
-          className="rounded-md border border-slate-300 px-3 py-2 bg-white"
-        />
-      </label>
+      <p className="text-xs text-text-dim">
+        Submit the TrxID after completing your bKash payment. Your request will be reviewed in the admin queue.
+      </p>
 
       <button
         type="submit"

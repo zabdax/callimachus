@@ -1,8 +1,5 @@
 import { describe, it, beforeAll, afterAll } from 'vitest';
-import {
-  initializeTestEnvironment, assertSucceeds, assertFails,
-  type RulesTestEnvironment,
-} from '@firebase/rules-unit-testing';
+import { initializeTestEnvironment, assertFails, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'node:fs';
 import { doc, setDoc } from 'firebase/firestore';
 
@@ -18,9 +15,9 @@ beforeAll(async () => {
 afterAll(async () => { await env.cleanup(); });
 
 describe('users/{uid}/activeSession/current rules', () => {
-  it('allows the owner to write their own anchor', async () => {
+  it('allows the server to write an anchor, but denies client write', async () => {
     const ctx = env.authenticatedContext('u1');
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'users/u1/activeSession/current'), {
         startTs: 1, pausedAccumMs: 0, serverStartTs: 2, updatedAt: Date.now(),
       }),

@@ -1,5 +1,4 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '@/lib/firebase/client';
+import { callWorkerUnwrap } from '@/lib/workers/client';
 
 export type UserExport = {
   profile: Record<string, unknown> | null;
@@ -11,16 +10,11 @@ export type UserExport = {
 };
 
 /**
- * Calls the `getUserData` Cloud Function and returns the export.
+ * Calls the `getUserData` Worker endpoint and returns the export.
  * Throws on auth error — caller decides UX.
  */
 export async function exportMyData(): Promise<UserExport> {
-  const fn = httpsCallable<Record<string, never>, UserExport>(
-    getFunctions(app),
-    'getUserData',
-  );
-  const { data } = await fn({});
-  return data;
+  return callWorkerUnwrap<Record<string, never>, UserExport>('getUserData', {});
 }
 
 /**

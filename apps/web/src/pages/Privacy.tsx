@@ -1,29 +1,3 @@
 export function PrivacyPolicy() {
-  return (
-    <main className="max-w-2xl mx-auto p-4 prose prose-slate">
-      <h1>Privacy policy</h1>
-      <p>
-        HSC Crackers stores the data you give us — your study sessions, syllabus
-        progress, upcoming tasks, and account profile — in our Firestore database.
-        We use this data solely to provide the app to you.
-      </p>
-      <h2>What we collect</h2>
-      <ul>
-        <li>Profile: name, email, photo, college, batch, medium.</li>
-        <li>Study sessions (durations, chapters you tagged).</li>
-        <li>Syllabus marks and spaced-repetition tasks.</li>
-        <li>FCM tokens for notifications (only if you opt in).</li>
-      </ul>
-      <h2>How to delete your data</h2>
-      <p>
-        Open Settings → "Delete my account". This permanently deletes all your
-        data and your Firebase Auth account within 24 hours.
-      </p>
-      <h2>বাংলা সারসংক্ষেপ</h2>
-      <p>
-        আমরা শুধুমাত্র অ্যাপ পরিচালনার জন্য আপনার তথ্য সংরক্ষণ করি। Settings →
-        "আমার অ্যাকাউন্ট মুছে ফেলুন" থেকে আপনার সমস্ত তথ্য মুছে ফেলতে পারেন।
-      </p>
-    </main>
-  );
+  return <main className="prose prose-slate mx-auto max-w-2xl p-4 text-text"><h1>Privacy policy</h1><p>HSC Crackers stores the data you give us — your study sessions, syllabus progress, upcoming tasks, payment review requests, and account profile — in Firebase/Firestore so the app can work for you.</p><h2>What we collect</h2><ul><li>Profile: name, email, photo, college, batch, and medium.</li><li>Study sessions, durations, and chapters you tag.</li><li>Syllabus marks and spaced-repetition tasks.</li><li>Payment request TrxIDs for manual subscription review.</li><li>Notification tokens only if you opt in.</li></ul><h2>Your choices</h2><p>You can export your app data from Settings. For account deletion or correction requests, contact the support channel published with this app. We will verify ownership before deleting protected account, payment, and study records.</p><h2>বাংলা সারসংক্ষেপ</h2><p>অ্যাপ চালানোর জন্য প্রয়োজনীয় তথ্যই আমরা সংরক্ষণ করি। Settings থেকে ডেটা এক্সপোর্ট করতে পারবেন। অ্যাকাউন্ট মুছে ফেলার অনুরোধের জন্য প্রকাশিত সাপোর্ট চ্যানেলে যোগাযোগ করুন।</p></main>;
 }

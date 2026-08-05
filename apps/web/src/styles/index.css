@@ -15,7 +15,28 @@
   --danger: #B33A3A;
 }
 
+html.light {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --bg: #0F1620;
+    --surface: #172030;
+    --surface-2: #1E293B;
+    --text: #E6EAF0;
+    --text-dim: #94A3B8;
+    --primary: #6B9BD1;
+    --accent: #E0A458;
+    --success: #7FB48E;
+    --warning: #D69472;
+    --danger: #E16A6A;
+  }
+}
+
 html.dark {
+  color-scheme: dark;
   --bg: #0F1620;
   --surface: #172030;
   --surface-2: #1E293B;
