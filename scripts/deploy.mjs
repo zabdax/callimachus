@@ -103,7 +103,11 @@ if (wants('workers')) {
 }
 
 if (wants('rules')) {
-  run('npx --yes firebase deploy --only firestore:rules,firestore:indexes', '.');
+  // Invoke the firebase CLI directly via the installed package in scripts/.
+  // 'firebase' is the bin name of the 'firebase-tools' npm package.
+  // Using 'node .../cli.js' avoids needing it on PATH or going through npx,
+  // which keeps the deploy reproducible and works regardless of cwd.
+  run('node scripts/node_modules/firebase-tools/lib/bin/cli.js deploy --only firestore:rules,firestore:indexes', '.');
 }
 
 console.log('✓ v2.0 deploy complete.');
