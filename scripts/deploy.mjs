@@ -103,7 +103,7 @@ if (wants('workers')) {
 }
 
 if (wants('rules')) {
-  run('firebase deploy --only firestore:rules,firestore:indexes', '.');
+  run('npx --yes firebase deploy --only firestore:rules,firestore:indexes', '.');
 }
 
 console.log('✓ v2.0 deploy complete.');
