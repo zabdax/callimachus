@@ -1,13 +1,16 @@
-import { httpsCallable, getFunctions } from 'firebase/functions';
-import { app } from '@/lib/firebase/client';
+import { callWorkerUnwrap, WorkerError } from '@/lib/workers/client';
 import { enqueueSession, listPending, removeQueued, type QueuedSession } from './offlineQueue';
 
 export async function stopAndSubmit(s: QueuedSession) {
   try {
-    const fn = httpsCallable(getFunctions(app), 'processStudySession');
-    const res = await fn(s);
-    return res.data as { ok: true; sessionIds: string[] };
-  } catch {
+    return await callWorkerUnwrap<QueuedSession, { ok: true; sessionIds: string[] }>(
+      'processStudySession',
+      s,
+    );
+  } catch (e) {
+    if (e instanceof WorkerError && e.status < 500) {
+      throw e; // validation error — do NOT queue, surface to caller
+    }
     await enqueueSession(s);
     return { ok: true, sessionIds: [], queued: true } as const;
   }
@@ -17,8 +20,10 @@ export async function replayPending(uid: string) {
   const items = (await listPending()).filter((q) => q.uid === uid);
   for (const q of items) {
     try {
-      const fn = httpsCallable(getFunctions(app), 'processStudySession');
-      await fn(q);
+      await callWorkerUnwrap<QueuedSession, { ok: true; sessionIds: string[] }>(
+        'processStudySession',
+        q,
+      );
       await removeQueued(q.id);
     } catch {
       // still offline — keep

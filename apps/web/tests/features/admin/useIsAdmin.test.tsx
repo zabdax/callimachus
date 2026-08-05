@@ -31,7 +31,7 @@ describe('useIsAdmin', () => {
   it('returns false when no user is signed in', async () => {
     useAuthMock.mockReturnValue({ user: null });
     const { result } = renderHook(() => useIsAdmin());
-    await waitFor(() => expect(result.current).toBe(false));
+    await waitFor(() => expect(result.current.isAdmin).toBe(false));
     expect(getDocMock).not.toHaveBeenCalled();
   });
 
@@ -39,13 +39,13 @@ describe('useIsAdmin', () => {
     useAuthMock.mockReturnValue({ user: { uid: 'u1' } });
     getDocMock.mockResolvedValue({ exists: () => false });
     const { result } = renderHook(() => useIsAdmin());
-    await waitFor(() => expect(result.current).toBe(false));
+    await waitFor(() => expect(result.current.isAdmin).toBe(false));
   });
 
   it('returns true when /admins/{uid} doc exists', async () => {
     useAuthMock.mockReturnValue({ user: { uid: 'admin-uid' } });
     getDocMock.mockResolvedValue({ exists: () => true });
     const { result } = renderHook(() => useIsAdmin());
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current.isAdmin).toBe(true));
   });
 });

@@ -3,14 +3,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@/lib/i18n';
 
-vi.mock('firebase/functions', () => ({
-  getFunctions: () => ({}),
-  httpsCallable: (_a: unknown, name: string) => async (data: unknown) => {
-    if (name === 'onboardingProfile') return { data: { ok: true, payload: data } };
-    return { data: { ok: true, payload: data } };
-  },
-  connectFunctionsEmulator: () => undefined,
+const setDocMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('firebase/firestore', () => ({
+  getFirestore: vi.fn(() => ({ _db: true })),
+  doc: vi.fn(() => ({ _doc: true })),
+  setDoc: (...a: unknown[]) => setDocMock(...a),
+  serverTimestamp: () => ({ __serverTimestamp: true }),
 }));
+
+vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 import { OnboardingForm } from '@/features/onboarding/OnboardingForm';
 
@@ -19,14 +21,14 @@ function renderWithI18n(ui: React.ReactNode) {
 }
 
 describe('OnboardingForm', () => {
-  it('submits medium + batch + college to onboardingProfile', async () => {
+  it('submits medium + batch + college to /users/{uid} via setDoc', async () => {
     const onDone = vi.fn();
     renderWithI18n(<OnboardingForm uid="u1" onDone={onDone} />);
 
     fireEvent.click(screen.getByLabelText(/Bangla Medium/i));
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'HSC-2026' } });
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'HSC-2026' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
     fireEvent.change(screen.getByLabelText(/college/i), {
@@ -36,11 +38,11 @@ describe('OnboardingForm', () => {
 
     await waitFor(() =>
       expect(onDone).toHaveBeenCalledWith({
-        displayName: '',
         college: 'Dhaka College',
         batchId: 'HSC-2026',
         medium: 'bangla',
       }),
     );
+    expect(setDocMock).toHaveBeenCalled();
   });
 });

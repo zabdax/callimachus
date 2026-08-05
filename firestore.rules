@@ -1,44 +1,52 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isSignedIn() {
-      return request.auth != null;
+    function isSignedIn() { return request.auth != null; }
+    function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function keysOnly(keys) { return request.resource.data.diff({}).affectedKeys().hasOnly(keys); }
+    function changedOnly(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function isShortString(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function validPlan(plan) { return plan in ['1m', '3m', '6m', '12m']; }
+    function validTrxId(v) { return isShortString(v, 64) && v.matches('^[A-Za-z0-9_-]+$'); }
+    function validProfileCreate() {
+      return keysOnly(['displayName','email','photoURL','college','batchId','medium','timezone','createdAt','updatedAt'])
+        && (!('displayName' in request.resource.data) || request.resource.data.displayName is string)
+        && (!('email' in request.resource.data) || request.resource.data.email is string)
+        && (!('photoURL' in request.resource.data) || request.resource.data.photoURL is string)
+        && isShortString(request.resource.data.college, 80)
+        && isShortString(request.resource.data.batchId, 40)
+        && request.resource.data.medium in ['bangla', 'english'];
     }
-    function isSelf(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-    function onlyProfileFields() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['displayName','email','photoURL','college','batchId','medium','updatedAt']);
+    function validProfileUpdate() { return changedOnly(['displayName','email','photoURL','college','batchId','medium','timezone','updatedAt']); }
+    function validPaymentCreate() {
+      return keysOnly(['uid','planId','trxId','status','createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && validPlan(request.resource.data.planId)
+        && validTrxId(request.resource.data.trxId)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp;
     }
 
     match /users/{uid} {
       allow read: if isSelf(uid) || isAdmin();
-      allow create: if isSelf(uid)
-                    && request.resource.data.diff({}).affectedKeys()
-                        .hasOnly(['displayName','email','photoURL','college','batchId','medium','timezone']);
-      allow update: if isSelf(uid) && onlyProfileFields();
-
-      match /sessions/{sid}  { allow read, write: if false; }
+      allow create: if isSelf(uid) && validProfileCreate();
+      allow update: if isSelf(uid) && validProfileUpdate();
+      match /sessions/{sid}  { allow read: if isSelf(uid) || isAdmin(); allow write: if false; }
       match /syllabus/{x}    { allow read, write: if isSelf(uid); }
       match /upcomingTasks/{x}{ allow read, write: if isSelf(uid); }
       match /meta/{x}        { allow read, write: if isSelf(uid); }
-      match /activeSession/{x} { allow read, write: if isSelf(uid); }
+      match /activeSession/{x} { allow read: if isSelf(uid) || isAdmin(); allow write: if false; }
       match /fcmTokens/{x}   { allow read, write: if isSelf(uid); }
     }
 
     match /paymentRequests/{id} {
-      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && validPaymentCreate();
       allow update, delete: if false;
     }
-
-    match /analytics/{x}  { allow read: if isSignedIn(); allow write: if false; }
-    match /admins/{uid}   { allow read: if isSignedIn(); allow write: if false; }
+    match /analytics/{x=**} { allow read: if isSignedIn(); allow write: if false; }
+    match /admins/{uid}   { allow read: if isSignedIn() && (isSelf(uid) || isAdmin()); allow write: if false; }
     match /batches/{x}    { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /syllabus/{x}   { allow read: if isSignedIn(); allow write: if false; }
     match /audit/{id}     { allow read: if isAdmin(); allow write: if false; }

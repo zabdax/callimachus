@@ -6,7 +6,7 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'node:fs';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
 
@@ -28,10 +28,13 @@ describe('users/{uid} rules', () => {
       setDoc(doc(ctx.firestore(), 'users/u1'), {
         displayName: 'A',
         email: 'a@b.c',
-        photoURL: null,
+        photoURL: 'https://a.b',
         college: 'X',
         batchId: 'HSC-2026',
         medium: 'bangla',
+        timezone: 'Asia/Dhaka',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
       }),
     );
   });

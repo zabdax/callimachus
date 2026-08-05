@@ -18,6 +18,7 @@ out/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 .env.*.local
 !.env.example
 **/service-account.json
@@ -79,6 +80,15 @@ lighthouserc.*
 
 # husky hooks that live on local disk, not in the source tree
 .husky/_/
+
+# Local ZCode CLI cache (this repo's working session metadata)
+.zcode/
+
+# Cloudflare Workers local artifacts
+apps/workers/.wrangler/
+apps/workers/node_modules/
+apps/workers/dist/
+apps/workers/dist-test/
 
 # OS metadata
 desktop.ini

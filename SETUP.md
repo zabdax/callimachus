@@ -123,15 +123,19 @@ npm run test:rules
 
 ---
 
-## 5. Run the Cloud Functions emulator
+## 5. Run the local Worker
+
+In a second terminal:
 
 ```bash
-cd apps/functions
-npm run serve
+cd apps/workers
+npm ci
+npm run dev
 ```
 
-This boots Firestore, Auth, Functions, and Storage emulators. The web app
-auto-detects the emulator when `VITE_USE_EMULATORS=true` is in your `.env`.
+For Firestore Rules tests, use the web package's `npm run test:rules` command.
+The production API uses Cloudflare Worker bindings and Firebase REST access;
+no Firebase Functions emulator is part of the current architecture.
 
 ---
 
@@ -176,8 +180,8 @@ export FIREBASE_TOKEN=$(firebase login:ci)    # CI token, optional
 node scripts/deploy.mjs
 ```
 
-This validates required env, builds both workspaces, and runs
-`firebase deploy --only hosting,functions,firestore:rules,storage`.
+This validates required env, builds both workspaces, deploys the Cloudflare
+Pages site and Worker, and deploys `firestore:rules,firestore:indexes`.
 
 CI does the same thing on every push to `main` via
 `.github/workflows/ci.yml`.

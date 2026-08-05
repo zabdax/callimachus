@@ -1,12 +1,6 @@
 import { LanguageSwitcher } from './LanguageSwitcher';
-
+import { ThemeSwitcher } from './ThemeSwitcher';
+import { ExportButton } from '@/features/export/ExportButton';
 export function SettingsScreen() {
-  return (
-    <main className="max-w-xl mx-auto p-4">
-      <h1 className="text-2xl font-semibold mb-4">Settings</h1>
-      <section className="rounded-lg border border-slate-200 p-4 bg-white">
-        <LanguageSwitcher />
-      </section>
-    </main>
-  );
+  return <main className="mx-auto max-w-xl space-y-4 p-4"><header><h1 className="font-display text-2xl">Settings</h1><p className="mt-1 text-sm text-text-dim">Personalize your study space and manage your data.</p></header><section className="space-y-4 rounded-xl border border-surface-2 bg-surface p-4"><LanguageSwitcher /><ThemeSwitcher /></section><section className="space-y-2 rounded-xl border border-surface-2 bg-surface p-4"><h2 className="font-display text-lg">Your data</h2><p className="text-sm text-text-dim">Download the study data currently connected to this account.</p><ExportButton /></section><section className="space-y-2 rounded-xl border border-surface-2 bg-surface p-4"><h2 className="font-display text-lg">Account deletion</h2><p className="text-sm text-text-dim">For account-deletion requests, contact the support channel listed in the published privacy policy. We do not claim instant deletion while protected payment and account records are being reviewed.</p></section></main>;
 }

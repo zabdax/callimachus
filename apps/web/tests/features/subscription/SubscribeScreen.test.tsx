@@ -14,18 +14,14 @@ vi.mock('@/features/subscription/SubscribeForm', () => ({
     onSubmit,
   }: {
     selectedPlanId: string;
-    onSubmit: (input: { planId: string; trxId: string; file: File }) => Promise<void>;
+    onSubmit: (input: { planId: string; trxId: string }) => Promise<void>;
     busy: boolean;
     error: string | null;
   }) => (
     <button
       data-testid="fake-submit"
       onClick={() =>
-        onSubmit({
-          planId: '3m',
-          trxId: 'TXN',
-          file: new File(['x'], 'a.png', { type: 'image/png' }),
-        })
+        onSubmit({ planId: '3m', trxId: 'TXN' })
       }
     >
       fake submit
