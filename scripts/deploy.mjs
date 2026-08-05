@@ -86,20 +86,20 @@ if (!skipBuild) {
 
 if (wants('kv') && !skipPages) {
   run(
-    `wrangler kv:namespace create TRACKER_CACHE || echo "namespace may already exist"`,
+    `npx wrangler kv:namespace create TRACKER_CACHE || echo "namespace may already exist"`,
     'apps/workers',
   );
 }
 
 if (wants('pages') && !skipPages) {
   run(
-    'wrangler pages deploy apps/web/dist --project-name hsc-tracker --commit-dirty=true',
+    'npx --yes wrangler pages deploy apps/web/dist --project-name hsc-tracker --commit-dirty=true',
     '.',
   );
 }
 
 if (wants('workers')) {
-  run('wrangler deploy --config apps/workers/wrangler.toml', '.');
+  run('npx --yes wrangler deploy --config apps/workers/wrangler.toml', '.');
 }
 
 if (wants('rules')) {
