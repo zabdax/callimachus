@@ -7,6 +7,12 @@ const { mockJwksGet, mockVerifyJwt } = vi.hoisted(() => ({
   mockVerifyJwt: vi.fn(),
 }));
 
+// Mirror the production Firebase issuer shape: https://securetoken.google.com/{projectId}.
+// `jwtVerify` is mocked in this file, so this string is decorative — but keeping it
+// faithful to auth.ts makes the test self-documenting.
+const PROJECT_ID = 'hsc-tracker-ef2b5';
+const ISS = `https://securetoken.google.com/${PROJECT_ID}`;
+
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => ({ get: mockJwksGet })),
   jwtVerify: (...args: unknown[]) => mockVerifyJwt(...args),
@@ -31,7 +37,7 @@ describe('verifyFirebaseIdToken', () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
       protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'uid-1', admin: true, aud: 'hsc-prod', iss: 'https://securetoken.google.com/' },
+      payload: { sub: 'uid-1', admin: true, aud: 'hsc-prod', iss: ISS },
     });
     const out = await verifyFirebaseIdToken('a.b.c', 'hsc-prod');
     expect(out.sub).toBe('uid-1');
@@ -63,7 +69,7 @@ describe('requireAuth (Hono middleware)', () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
       protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'uid-2', aud: 'p', iss: 'https://securetoken.google.com/' },
+      payload: { sub: 'uid-2', aud: 'p', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
     app.use('*', requireAuth('p'));
@@ -99,7 +105,7 @@ describe('requireAuth (Hono middleware)', () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
       protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'admin-uid', admin: true, aud: 'p', iss: 'https://securetoken.google.com/' },
+      payload: { sub: 'admin-uid', admin: true, aud: 'p', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
     app.use('*', requireAuth('p'));
@@ -124,7 +130,7 @@ describe('requireAdmin (Hono middleware)', () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
       protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'u1', aud: 'p', iss: 'https://securetoken.google.com/' },
+      payload: { sub: 'u1', aud: 'p', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
     app.use('*', requireAuth('p'));
@@ -140,7 +146,7 @@ describe('requireAdmin (Hono middleware)', () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
       protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'admin', admin: true, aud: 'p', iss: 'https://securetoken.google.com/' },
+      payload: { sub: 'admin', admin: true, aud: 'p', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
     app.use('*', requireAuth('p'));

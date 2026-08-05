@@ -8,111 +8,23 @@ import { getFirestore } from 'firebase/firestore';
 import { app } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
 import { BATCH_SEED } from '@/features/batches/seedData';
-
-const Schema = z.object({
-  medium: z.enum(['bangla', 'english']),
-  batchId: z.string().min(1),
-  college: z.string().min(1).max(80),
-});
+const Schema = z.object({ medium: z.enum(['bangla', 'english']), batchId: z.string().min(1), college: z.string().trim().min(1).max(80) });
 export type FormData = z.infer<typeof Schema>;
-
-export function OnboardingForm({ uid, onDone }: { uid: string; onDone: (v: FormData) => void }) {
-  const { t } = useTranslation();
-  const [step, setStep] = useState(0);
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    formState: { errors },
-  } = useForm<FormData>({
-    resolver: zodResolver(Schema),
-    defaultValues: { medium: 'bangla', batchId: 'HSC-2026', college: '' },
-  });
-
+export function OnboardingForm({ uid, onDone }: { uid: string; onDone: (value: FormData) => void }) {
+  const { t } = useTranslation(); const [step, setStep] = useState(0); const [submitError, setSubmitError] = useState<string | null>(null);
+  const { register, handleSubmit, setValue, trigger, formState: { errors, isSubmitting } } = useForm<FormData>({ resolver: zodResolver(Schema), defaultValues: { medium: 'bangla', batchId: 'HSC-2026', college: '' } });
+  const next = async (fields: Array<keyof FormData>) => { if (await trigger(fields)) setStep((value) => value + 1); };
   const submit = handleSubmit(async (data) => {
-    const payload = { ...data, displayName: '' };
-    // Per Plan 4 / session 7 design change: onboardingProfile is no
-    // longer a Cloud Function (Workers don't have an Auth trigger).
-    // We write the user doc directly here. Firestore rules still gate
-    // the write — only the owner can write their own doc.
-    await setDoc(doc(getFirestore(app), 'users', uid), {
-      ...payload,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    onDone(payload);
+    setSubmitError(null);
+    try {
+      await setDoc(doc(getFirestore(app), 'users', uid), { ...data, displayName: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+      onDone(data);
+    } catch (error) { setSubmitError((error as Error).message || 'We could not save your profile. Please try again.'); }
   });
-
-  return (
-    <form onSubmit={submit} className="mx-auto max-w-md space-y-4 p-4 text-text">
-      {step === 0 && (
-        <fieldset>
-          <legend className="mb-2 font-display">{t('onboarding.step1.title')}</legend>
-          <label className="block">
-            <input
-              type="radio"
-              value="bangla"
-              {...register('medium')}
-              onChange={() => setValue('medium', 'bangla')}
-            />{' '}
-            {t('onboarding.step1.bangla')}
-          </label>
-          <label className="block">
-            <input
-              type="radio"
-              value="english"
-              {...register('medium')}
-              onChange={() => setValue('medium', 'english')}
-            />{' '}
-            {t('onboarding.step1.english')}
-          </label>
-          <Button type="button" onClick={() => setStep(1)}>
-            {t('onboarding.next')}
-          </Button>
-        </fieldset>
-      )}
-      {step === 1 && (
-        <fieldset>
-          <legend className="mb-2 font-display">{t('onboarding.step2.title')}</legend>
-          <select
-            {...register('batchId')}
-            onChange={(e) => setValue('batchId', e.target.value)}
-            className="rounded border p-2"
-          >
-            {BATCH_SEED.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={() => setStep(0)}>
-              {t('onboarding.back')}
-            </Button>
-            <Button type="button" onClick={() => setStep(2)}>
-              {t('onboarding.next')}
-            </Button>
-          </div>
-        </fieldset>
-      )}
-      {step === 2 && (
-        <fieldset>
-          <legend className="mb-2 font-display">{t('onboarding.step3.title')}</legend>
-          <input
-            aria-label="college"
-            {...register('college')}
-            className="w-full rounded border p-2"
-          />
-          {errors.college && <p className="text-danger">{errors.college.message}</p>}
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={() => setStep(1)}>
-              {t('onboarding.back')}
-            </Button>
-            <Button type="submit">{t('onboarding.finish')}</Button>
-          </div>
-        </fieldset>
-      )}
-      <p className="text-text-dim">uid: {uid}</p>
-    </form>
-  );
+  return <form onSubmit={submit} className="mx-auto max-w-md space-y-5 p-4 text-text">
+    <p className="text-sm text-text-dim">Step {step + 1} of 3</p>
+    {step === 0 && <fieldset className="space-y-3"><legend className="font-display text-xl">{t('onboarding.step1.title')}</legend>{(['bangla', 'english'] as const).map((medium) => <label key={medium} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-2 p-3"><input type="radio" value={medium} {...register('medium')} onChange={() => setValue('medium', medium, { shouldValidate: true })} />{t(`onboarding.step1.${medium}`)}</label>)}<Button type="button" onClick={() => void next(['medium'])}>{t('onboarding.next')}</Button></fieldset>}
+    {step === 1 && <fieldset className="space-y-3"><legend className="font-display text-xl">{t('onboarding.step2.title')}</legend><label className="flex flex-col gap-1"><span className="text-sm font-medium">Batch</span><select {...register('batchId')} className="rounded-md border border-surface-2 bg-surface p-3">{BATCH_SEED.map((batch) => <option key={batch.id} value={batch.id}>{batch.label}</option>)}</select></label><div className="flex gap-2"><Button type="button" variant="ghost" onClick={() => setStep(0)}>{t('onboarding.back')}</Button><Button type="button" onClick={() => setStep(2)}>{t('onboarding.next')}</Button></div></fieldset>}
+    {step === 2 && <fieldset className="space-y-3"><legend className="font-display text-xl">{t('onboarding.step3.title')}</legend><label className="flex flex-col gap-1"><span className="text-sm font-medium">College</span><input {...register('college')} className="rounded-md border border-surface-2 bg-surface p-3" autoComplete="organization" /></label>{errors.college && <p role="alert" className="text-sm text-danger">{errors.college.message}</p>}{submitError && <p role="alert" className="text-sm text-danger">{submitError}</p>}<div className="flex gap-2"><Button type="button" variant="ghost" onClick={() => setStep(1)}>{t('onboarding.back')}</Button><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : t('onboarding.finish')}</Button></div></fieldset>}
+  </form>;
 }

@@ -28,7 +28,7 @@ describe('OnboardingForm', () => {
     fireEvent.click(screen.getByLabelText(/Bangla Medium/i));
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'HSC-2026' } });
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'HSC-2026' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
     fireEvent.change(screen.getByLabelText(/college/i), {
@@ -38,7 +38,6 @@ describe('OnboardingForm', () => {
 
     await waitFor(() =>
       expect(onDone).toHaveBeenCalledWith({
-        displayName: '',
         college: 'Dhaka College',
         batchId: 'HSC-2026',
         medium: 'bangla',
