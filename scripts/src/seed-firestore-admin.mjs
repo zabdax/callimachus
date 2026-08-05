@@ -16,8 +16,12 @@ if (!credPath || !projectId) {
   process.exit(1);
 }
 
+// Parse the SA JSON to an object — cert() accepts either a path string or
+// an object, and passing the raw string would make it try to read again.
+const serviceAccount = JSON.parse(readFileSync(credPath, 'utf8'));
+
 admin.initializeApp({
-  credential: admin.credential.cert(readFileSync(credPath, 'utf8')),
+  credential: admin.credential.cert(serviceAccount),
   projectId,
 });
 
