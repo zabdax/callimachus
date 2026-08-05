@@ -46,10 +46,9 @@ jobs:
 
       - name: Mint new access token
         working-directory: scripts
-        env:
-          # mint-firebase-token.mjs reads the SA JSON from the path
-          # passed as argv[2], or defaults to C:/Users/MIT/.config/hsc-tracker/sa.json.
-          # GitHub runners are Linux, so pass the Linux path.
+        # mint-firebase-token.mjs reads the SA JSON from argv[2] or the
+        # default path; the step before this wrote it to ~/.config/hsc-tracker/sa.json
+        # (Linux home on the GitHub runner, not the Windows default in the script).
         run: |
           TOKEN=$(node src/mint-firebase-token.mjs ~/.config/hsc-tracker/sa.json | grep '^TOKEN:' | sed 's/^TOKEN://')
           if [ -z "$TOKEN" ]; then
