@@ -6,7 +6,7 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'node:fs';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
 
@@ -30,7 +30,7 @@ describe('paymentRequests rules', () => {
         planId: '3m',
         trxId: 'TXN1',
         status: 'pending',
-        storagePath: 'paymentRequests/u1/abc.png',
+        createdAt: Timestamp.now(),
       }),
     );
   });

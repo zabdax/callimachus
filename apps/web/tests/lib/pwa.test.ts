@@ -15,8 +15,8 @@ describe('PWA manifest wiring', () => {
     expect(cfg).toMatch(/background_color:\s*['"]#0F1620['"]/);
   });
 
-  it('runtime caching for firestore.googleapis.com is configured', () => {
-    expect(cfg).toMatch(/firestore.*googleapis/);
-    expect(cfg).toMatch(/StaleWhileRevalidate/);
+  it('does not runtime-cache private Firestore responses', () => {
+    expect(cfg).toMatch(/Do not runtime-cache private Firestore responses/);
+    expect(cfg).toMatch(/runtimeCaching:\s*\[\]/);
   });
 });

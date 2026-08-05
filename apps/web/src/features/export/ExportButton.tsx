@@ -23,7 +23,7 @@ export function ExportButton() {
         type="button"
         onClick={onClick}
         disabled={busy}
-        className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium disabled:opacity-50"
+        className="rounded-md border border-surface-2 bg-surface px-3 py-2 text-sm font-medium text-text disabled:opacity-50"
       >
         {busy ? 'Exporting…' : 'Export my data'}
       </button>

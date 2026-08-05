@@ -10,9 +10,7 @@ const STORAGE_KEY = 'app.theme';
 export function applyTheme(theme: Theme): void {
   const html = document.documentElement;
   html.classList.remove('dark', 'light');
-  if (theme === 'dark' || theme === 'light') {
-    html.classList.add(theme);
-  }
+  if (theme !== 'auto') html.classList.add(theme);
   try {
     localStorage.setItem(STORAGE_KEY, theme);
   } catch {

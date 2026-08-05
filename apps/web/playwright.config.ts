@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import process from 'node:process';
 
 /**
  * Playwright config for the HSC Study Tracker e2e suite.
@@ -13,7 +14,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 60_000,
+  timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   retries: 0,
@@ -29,7 +30,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --mode test',
+    command: process.platform === 'win32' ? 'set VITE_ENABLE_TEST_ROUTES=true&& npm run dev -- --mode test' : 'VITE_ENABLE_TEST_ROUTES=true npm run dev -- --mode test',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

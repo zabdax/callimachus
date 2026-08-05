@@ -1,4 +1,5 @@
 import { useIsAdmin } from './useIsAdmin';
+import { PageLoading } from '@/components/ui/PageState';
 
 /**
  * Route guard for /admin/* — returns null while checking, redirects to /
@@ -8,7 +9,7 @@ import { useIsAdmin } from './useIsAdmin';
  */
 export function RequireAdmin({ children }: { children: JSX.Element }) {
   const { isAdmin, loading } = useIsAdmin();
-  if (loading) return null; // wait for the getDoc round-trip before deciding
+  if (loading) return <PageLoading label="Checking admin access…" />;
   if (!isAdmin) {
     if (typeof window !== 'undefined') {
       window.location.replace('/');

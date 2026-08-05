@@ -15,10 +15,10 @@ window. Security fixes land on `main` first.
 
 **Please do not file a public issue for security bugs.**
 
-Email: security@callimachus.dev (placeholder; replace before publishing
-or wire to a private contact form). Encrypt sensitive reports with the
-maintainer's PGP key (publish it on the GitHub profile if you go that
-route).
+Use GitHub's private vulnerability-reporting feature for this repository.
+If it is not enabled yet, contact the repository owner privately and do not
+include exploit details in a public issue. Enable a monitored security email
+before publishing a public contact address.
 
 Include:
 

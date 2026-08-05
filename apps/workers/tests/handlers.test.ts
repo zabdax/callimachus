@@ -8,6 +8,7 @@ class RecordingDb extends StubFirestore {
   writes: { path: string; data: unknown }[] = [];
   count: Record<string, number> = {};
   lastEndedAt: number | null = null;
+  activeSession = { sessionId: 's1', serverStartTs: 1_700_000_000_000, clientStartTs: 1_700_000_000_000 };
 
   override getLastSessionEndedAt(): Promise<number | null> {
     return Promise.resolve(this.lastEndedAt);
@@ -30,11 +31,18 @@ class RecordingDb extends StubFirestore {
     this.writes.push({ path: `users/${uid}/chapterStats/${cid}`, data: { totalSec: dur } });
     return Promise.resolve();
   }
-  override setActiveSession(uid: string, serverTs: number, clientTs: number): Promise<void> {
-    this.writes.push({
-      path: `users/${uid}/activeSession/current`,
-      data: { serverStartTs: serverTs, clientStartTs: clientTs },
-    });
+  override setActiveSession(uid: string, sessionOrServerTs: { sessionId: string; serverStartTs: number; clientStartTs: number } | number, clientTs?: number): Promise<void> {
+    const data = typeof sessionOrServerTs === 'number'
+      ? { sessionId: 'legacy', serverStartTs: sessionOrServerTs, clientStartTs: clientTs ?? 0 }
+      : sessionOrServerTs;
+    this.activeSession = data;
+    this.writes.push({ path: `users/${uid}/activeSession/current`, data });
+    return Promise.resolve();
+  }
+  override getActiveSession(): Promise<{ sessionId: string; serverStartTs: number; clientStartTs: number } | null> {
+    return Promise.resolve(this.activeSession);
+  }
+  override clearActiveSession(): Promise<void> {
     return Promise.resolve();
   }
 }
@@ -49,6 +57,7 @@ describe('sessionStart', () => {
     const now = () => 1_700_000_000_000;
     const out = await sessionStart('u1', { clientStartTs: 1_700_000_000_000 - 5 }, db, now);
     expect(out.serverStartTs).toBe(1_700_000_000_000);
+    expect(out.sessionId).toBeTypeOf('string');
     expect(db.writes).toHaveLength(1);
     expect(db.writes[0]?.path).toBe('users/u1/activeSession/current');
   });
@@ -70,6 +79,7 @@ describe('processStudySession', () => {
   });
 
   const validInput = () => ({
+    sessionId: 's1',
     clientStartTs: 1_700_000_000_000,
     clientEndedTs: 1_700_000_000_000 + 30 * 60_000, // 30 min
     serverStartTs: 1_700_000_000_000,
@@ -125,10 +135,10 @@ describe('processStudySession', () => {
     );
   });
 
-  it('rejects when there are not enough valid presence nonces', async () => {
-    const bad = { ...validInput(), presenceNonces: [] };
-    await expect(processStudySession('u1', bad, db, 'ua')).rejects.toThrow(
-      /insufficient/,
+  it('rejects when the server-owned active session does not match', async () => {
+    db.activeSession = { sessionId: 'different-session', serverStartTs: 1_700_000_000_000, clientStartTs: 1_700_000_000_000 };
+    await expect(processStudySession('u1', validInput(), db, 'ua')).rejects.toThrow(
+      /active study session/,
     );
   });
 });

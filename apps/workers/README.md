@@ -1,56 +1,35 @@
-# apps/workers — Cloudflare Workers
+# Cloudflare Worker API
 
-Scaffold for the Callimachus Cloudflare Worker. Plan 4 / session 1 only;
-real endpoints (processStudySession, approvePayment, generateSignedUploadUrl,
-and the cron handlers) land in sessions 2 through 6.
+This Worker provides the authenticated server boundary for HSC Crackers. Firebase Auth and Firestore remain the identity/data platform; Cloudflare Workers runs validation, study-session processing, payment approval, and protected data export.
 
-## Layout
+## Routes
 
+- `GET /api/echo` — deployment smoke check.
+- `GET /api/private/me` — authenticated account diagnostics.
+- `POST /api/sessionStart` — creates a server-owned study-session anchor.
+- `POST /api/processStudySession` — validates and persists a completed study session.
+- `POST /api/approvePayment` — admin-only pending-payment approval.
+- `POST /api/getUserData` — authenticated export for the requesting user only.
+
+## Required bindings
+
+`wrangler.toml` defines non-secret values and KV. Set the following secret outside source control:
+
+```bash
+wrangler secret put FIREBASE_ACCESS_TOKEN
 ```
-src/
-  index.ts      Worker entrypoint (default export with a `fetch` method).
-  router.ts     Hono app; mounted under `/api/...`.
-tests/          Vitest specs. Run against the same Hono router the
-                Worker entrypoint uses, so prod and tests share the
-                route definition.
-wrangler.toml   Cloudflare bindings. Empty for session 1; R2 + KV land later.
-tsconfig.json   Extends @cloudflare/workers-types. strict + noUncheckedIndexedAccess.
-vitest.config.ts
-```
 
-## Develop
+The access token must belong to a least-privilege service account and be refreshed before expiration. The Worker fails closed when Firebase configuration is unavailable.
+
+`ALLOWED_ORIGINS` is a comma-separated allowlist of the deployed web origin(s). Update it before shipping a custom Pages domain.
+
+## Local commands
 
 ```bash
 npm ci
-npm run dev      # wrangler dev (offline; no bindings yet)
+npm test
+npm run build
+npm run dev
 ```
 
-## Test
-
-```bash
-npm test         # vitest run
-```
-
-## Build
-
-```bash
-npm run build    # tsc --noEmit (we don't emit JS; wrangler bundles on deploy)
-```
-
-## Deploy (later sessions only)
-
-```bash
-npm run deploy   # wrangler deploy
-```
-
-## Why Hono
-
-Hono is tiny, edge-native, and TypeScript-first. It runs on Workers,
-Node, Bun, and Deno — same code path in tests and prod. The same
-`app.request(url)` we call in tests also runs inside the production
-fetch handler.
-
-## References
-
-- Plan: `docs/superpowers/specs/2026-08-01-platform-migration-design.md`
-  (Hybrid A; Firebase Auth + Firestore stay; Cloud Functions move here)
+Use `wrangler deploy --dry-run` for a configuration/bundle check; it does not replace full authenticated integration testing.

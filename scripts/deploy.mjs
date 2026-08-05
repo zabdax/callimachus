@@ -12,7 +12,7 @@
 //   2. Build apps/web (vite build → apps/web/dist).
 //   3. Build apps/workers (tsc → apps/workers/lib).
 //   4. wrangler kv:namespace create TRACKER_CACHE (idempotent).
-//   5. wrangler pages deploy apps/web/dist --project-name hsc-crackers.
+//   5. wrangler pages deploy apps/web/dist --project-name hsc-tracker.
 //   6. wrangler deploy --config apps/workers/wrangler.toml.
 //   7. firebase deploy --only firestore:rules (rules still needed).
 //
@@ -93,7 +93,7 @@ if (wants('kv') && !skipPages) {
 
 if (wants('pages') && !skipPages) {
   run(
-    'wrangler pages deploy apps/web/dist --project-name hsc-crackers --commit-dirty=true',
+    'wrangler pages deploy apps/web/dist --project-name hsc-tracker --commit-dirty=true',
     '.',
   );
 }
@@ -107,7 +107,7 @@ if (wants('rules')) {
 }
 
 console.log('✓ v2.0 deploy complete.');
-console.log('  Workers:  https://' + (process.env.WORKERS_BASE ?? 'hsc-crackers-workers.workers.dev'));
-console.log('  Pages:    https://hsc-crackers.pages.dev');
+console.log('  Workers:  https://' + (process.env.WORKERS_BASE ?? 'hsc-tracker-ef2b5-workers.byzubooo.workers.dev'));
+console.log('  Pages:    https://hsc-tracker.pages.dev');
 console.log('  KV:       TRACKER_CACHE');
 console.log('  R2:       (intentionally disabled — see HANDOFF.md §no-screenshot)');

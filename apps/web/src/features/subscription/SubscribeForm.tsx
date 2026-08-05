@@ -21,12 +21,14 @@ type Props = {
  */
 export function SubscribeForm({ selectedPlanId, onSubmit, busy, error }: Props) {
   const [trxId, setTrxId] = useState('');
-  const canSubmit = !!selectedPlanId && trxId.trim().length > 0 && !busy;
+  const normalizedTrxId = trxId.trim();
+  const validTrxId = /^[A-Za-z0-9_-]{4,64}$/.test(normalizedTrxId);
+  const canSubmit = !!selectedPlanId && validTrxId && !busy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || !selectedPlanId) return;
-    await onSubmit({ planId: selectedPlanId, trxId: trxId.trim() });
+    await onSubmit({ planId: selectedPlanId, trxId: normalizedTrxId });
   };
 
   return (
@@ -44,14 +46,17 @@ export function SubscribeForm({ selectedPlanId, onSubmit, busy, error }: Props) 
           value={trxId}
           onChange={(e) => setTrxId(e.target.value)}
           required
-          className="rounded-md border border-slate-300 px-3 py-2"
+          className="rounded-md border border-surface-2 bg-surface px-3 py-2"
           placeholder="e.g. TRX123ABC"
+          minLength={4}
+          maxLength={64}
+          pattern="[A-Za-z0-9_-]+"
         />
+        {trxId && !validTrxId && <span className="text-xs text-danger">Use 4–64 letters, numbers, underscores, or hyphens.</span>}
       </label>
 
-      <p className="text-xs text-slate-500">
-        After you submit, send the bKash TrxID + screenshot to our
-        WhatsApp: +880-XXXX-XXXX. The admin will approve within 24h.
+      <p className="text-xs text-text-dim">
+        Submit the TrxID after completing your bKash payment. Your request will be reviewed in the admin queue.
       </p>
 
       <button

@@ -49,22 +49,22 @@ export function ApprovalQueue() {
   );
 
   if (items === null) {
-    return <p className="p-4 text-sm text-slate-500">Loading…</p>;
+    return <p className="p-4 text-sm text-text-dim" role="status">Loading…</p>;
   }
 
   if (items.length === 0) {
-    return <p className="p-4 text-sm text-slate-500">No pending requests.</p>;
+    return <p className="p-4 text-sm text-text-dim">No pending requests.</p>;
   }
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-semibold mb-3">Pending payment requests</h1>
+      <h1 className="mb-3 font-display text-2xl">Pending payment requests</h1>
       {error && (
         <div role="alert" className="mb-3 rounded-md bg-danger/10 text-danger p-3 text-sm">
           {error}
         </div>
       )}
-      <table className="w-full text-sm border-collapse" data-testid="approval-table">
+      <div className="overflow-x-auto rounded-xl border border-surface-2 bg-surface"><table className="w-full min-w-[38rem] text-sm border-collapse" data-testid="approval-table">
         <thead>
           <tr className="text-left border-b">
             <th className="py-2">TrxID</th>
@@ -92,7 +92,7 @@ export function ApprovalQueue() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from '@/app/ErrorBoundary';
 import { AppRouter } from '@/app/router';
 import { initSentry } from '@/lib/sentry';
+import '@/lib/firebase/appCheck';
 import '@/styles/index.css';
 
 initSentry();

@@ -1,300 +1,169 @@
-import type { FirestoreAdapter, SessionDoc, PaymentRequestDoc, SubscriptionDoc } from './db';
+import type {
+  ActiveSession,
+  FirestoreAdapter,
+  PaymentRequest,
+  SessionDoc,
+  SubscriptionDoc,
+  UserExport,
+} from './db';
 import type { CronAdapters } from './crons';
 import type { BatchState } from './handlers/batchStatus';
 
-/**
- * Firestore adapter that talks to Firestore over its REST API
- * (https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents/...).
- *
- * Why REST and not firebase-admin? firebase-admin requires Node.js APIs
- * (`fs`, `http.Agent`, etc.) that aren't available in Cloudflare Workers
- * V8 isolates. The Firestore REST API is what the JS SDK uses anyway —
- * it's just a thin shim over fetch().
- *
- * Each method maps to a single REST call. Multi-path atomic writes use the
- * Commit endpoint with multiple `writes` entries.
- */
-
 export type FirestoreCreds = { projectId: string; accessToken: string };
+type FirestoreDocument = { name: string; updateTime?: string; fields?: Record<string, FirestoreValue> };
+type FirestoreValue = Record<string, unknown>;
+type Write = {
+  update?: { name: string; fields: Record<string, FirestoreValue> };
+  updateMask?: { fieldPaths: string[] };
+  updateTransforms?: Array<{ fieldPath: string; increment?: FirestoreValue; setToServerValue?: 'REQUEST_TIME' }>;
+  currentDocument?: { updateTime?: string; exists?: boolean };
+  delete?: string;
+};
 
-/**
- * Build a Firestore REST client bound to the given credentials. The
- * helper functions are returned as a small object so the cron adapters
- * below can reuse them without rebuilding.
- */
 function makeClient(creds: FirestoreCreds) {
   const base = `https://firestore.googleapis.com/v1/projects/${creds.projectId}/databases/(default)/documents`;
   const auth = { Authorization: `Bearer ${creds.accessToken}` };
 
-  async function getDoc(path: string): Promise<unknown> {
+  async function getDoc(path: string): Promise<FirestoreDocument | null> {
     const res = await fetch(`${base}/${path}`, { headers: auth });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`firestore GET ${path} ${res.status}`);
-    return await res.json();
+    return res.json() as Promise<FirestoreDocument>;
   }
 
-  async function listCollection(
-    path: string,
-    query: Record<string, string>,
-  ): Promise<{ documents?: { name: string; fields: Record<string, unknown> }[] }> {
-    const params = new URLSearchParams(query);
-    const res = await fetch(`${base}/${path}?${params}`, { headers: auth });
+  async function listCollection(path: string, query: Record<string, string>): Promise<FirestoreDocument[]> {
+    const res = await fetch(`${base}/${path}?${new URLSearchParams(query)}`, { headers: auth });
     if (!res.ok) throw new Error(`firestore LIST ${path} ${res.status}`);
-    return (await res.json()) as { documents?: { name: string; fields: Record<string, unknown> }[] };
+    const data = await res.json() as { documents?: FirestoreDocument[] };
+    return data.documents ?? [];
   }
 
-  async function commit(writes: { path: string; data: Record<string, unknown> }[]) {
+  async function commit(writes: Write[]): Promise<void> {
     const res = await fetch(`${base}:commit`, {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        writes: writes.map((w) => ({
-          update: { name: `${base}/${w.path}`, fields: toFirestoreFields(w.data) },
-        })),
-      }),
+      body: JSON.stringify({ writes }),
     });
-    if (!res.ok) throw new Error(`firestore COMMIT ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new Error(`firestore COMMIT ${res.status}`);
   }
 
-  return { base, auth, getDoc, listCollection, commit };
+  const documentName = (path: string) => `${base}/${path}`;
+  return { getDoc, listCollection, commit, documentName };
 }
 
-/**
- * In Workers, `accessToken` comes from the GCP service-account JWT
- * minted by your bindings. This helper accepts a pre-minted token; the
- * actual minting (e.g. via @cloudflare/workers-firestore or jose with
- * a service-account key) is session 8 work.
- */
 export function makeRestAdapter(creds: FirestoreCreds): FirestoreAdapter {
   const client = makeClient(creds);
-
-  return {
-    async getLastSessionEndedAt(uid: string): Promise<number | null> {
-      const out = await client.listCollection(`users/${uid}/sessions`, {
-        'orderBy': 'endedAtMs desc',
-        'pageSize': '1',
-      });
-      const doc = out.documents?.[0];
-      if (!doc) return null;
-      return intValue(doc.fields['endedAtMs']);
-    },
-
-    async countTodaySessions(uid: string, date: string): Promise<number> {
-      const out = await client.listCollection(`users/${uid}/sessions`, {
-        'where': `date == "${date}"`,
-        'pageSize': '1000',
-      });
-      return out.documents?.length ?? 0;
-    },
-
-    async writeSession(uid: string, id: string, doc: SessionDoc): Promise<void> {
-      await client.commit([{ path: `users/${uid}/sessions/${id}`, data: doc as unknown as Record<string, unknown> }]);
-    },
-
-    async incrementDailyLeaderboard(date: string, durationSec: number, uid: string): Promise<void> {
-      await client.commit([
-        {
-          path: `analytics/leaderboard_daily/${date}`,
-          data: { totalDurationSec: { increment: durationSec }, activeUserCount: { increment: 0 } },
-        },
-        {
-          path: `analytics/leaderboard_daily/${date}/users/${uid}`,
-          data: { durationSec: { increment: durationSec } },
-        },
-      ]);
-    },
-
-    async incrementChapterStat(uid: string, chapterId: string, durationSec: number): Promise<void> {
-      await client.commit([
-        {
-          path: `users/${uid}/chapterStats/${chapterId}`,
-          data: { totalSec: { increment: durationSec }, lastStudiedAt: { timestampValue: new Date().toISOString() } },
-        },
-      ]);
-    },
-
-    async setActiveSession(uid: string, serverStartTs: number, clientStartTs: number): Promise<void> {
-      await client.commit([
-        {
-          path: `users/${uid}/activeSession/current`,
-          data: { serverStartTs, clientStartTs, updatedAt: { timestampValue: new Date().toISOString() } },
-        },
-      ]);
-    },
-
-    async getPaymentRequest(id: string): Promise<{ uid: string; planId: string } | null> {
-      const doc = (await client.getDoc(`paymentRequests/${id}`)) as { fields?: Record<string, { stringValue?: string }> } | null;
-      if (!doc || !doc.fields) return null;
-      const uid = doc.fields['uid']?.stringValue;
-      const planId = doc.fields['planId']?.stringValue;
-      if (!uid || !planId) return null;
-      return { uid, planId };
-    },
-
-    async setUserSubscription(uid: string, sub: SubscriptionDoc): Promise<void> {
-      await client.commit([{ path: `users/${uid}`, data: { subscription: sub, updatedAt: { timestampValue: new Date().toISOString() } } }]);
-    },
-
-    async markPaymentRequestApproved(id: string, by: string, atMs: number): Promise<void> {
-      await client.commit([
-        {
-          path: `paymentRequests/${id}`,
-          data: {
-            status: 'approved',
-            approvedAt: atMs,
-            approvedBy: by,
-          },
-        },
-      ]);
-    },
-  };
-}
-
-/**
- * Cron adapters: reuse the same REST client. The nonces / push side
- * lives in src/kv.ts and src/push.ts (session 8). For now they are
- * stubs that return no-ops.
- */
-export const cronAdapters: CronAdapters = (() => {
-  const client = makeClient({
-    projectId:
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
-        ?.FIREBASE_PROJECT_ID ?? 'test-project',
-    accessToken:
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
-        ?.FIREBASE_ACCESS_TOKEN ?? 'test-token',
+  const partialWrite = (path: string, data: Record<string, unknown>, updateTime?: string): Write => ({
+    update: { name: client.documentName(path), fields: toFirestoreFields(data) },
+    updateMask: { fieldPaths: Object.keys(data) },
+    ...(updateTime ? { currentDocument: { updateTime } } : {}),
   });
 
   return {
-    now: () => Date.now(),
-    async listBatches() {
-      const out = await client.listCollection(`batches`, { pageSize: '100' });
-      return (out.documents ?? []).map((d: { name: string; fields: Record<string, unknown> }) => {
-        const f = d.fields;
-        const ts = (k: string) => {
-          const v = f[k] as { timestampValue?: string } | undefined;
-          return v?.timestampValue ? new Date(v.timestampValue).getTime() : 0;
-        };
-        return {
-          id: d.name.split('/').pop() ?? '',
-          collegeStart: ts('collegeStart'),
-          examStart: ts('examStart'),
-          examEnd: ts('examEnd'),
-        };
-      });
+    async getLastSessionEndedAt(uid) {
+      const [doc] = await client.listCollection(`users/${uid}/sessions`, { orderBy: 'endedAtMs desc', pageSize: '1' });
+      return intValue(doc?.fields?.endedAtMs);
     },
-    async writeBatchStatus(id, state: BatchState) {
+    async countTodaySessions(uid, date) {
+      const docs = await client.listCollection(`users/${uid}/sessions`, { where: `date == "${date}"`, pageSize: '1000' });
+      return docs.length;
+    },
+    async writeSession(uid, id, doc) {
+      await client.commit([partialWrite(`users/${uid}/sessions/${id}`, doc as unknown as Record<string, unknown>)]);
+    },
+    async incrementDailyLeaderboard(date, durationSec, uid) {
       await client.commit([
-        { path: `batches/${id}`, data: { status: { stringValue: state.kind }, updatedAt: { timestampValue: new Date().toISOString() } } },
+        incrementWrite(client.documentName(`analytics/leaderboard_daily/${date}`), { totalDurationSec: durationSec }),
+        incrementWrite(client.documentName(`analytics/leaderboard_daily/${date}/users/${uid}`), { durationSec }),
       ]);
     },
-    async listTodaySessions(date: string) {
-      const out = await client.listCollection(`analytics/leaderboard_daily/${date}/users`, { pageSize: '1000' });
-      return (out.documents ?? []).map((d: { name: string; fields: Record<string, unknown> }) => {
-        const dur = Number((d.fields['durationSec'] as { integerValue?: string } | undefined)?.integerValue ?? 0);
-        const uid = d.name.split('/').pop() ?? '';
-        return { uid, durationSec: dur };
-      });
+    async incrementChapterStat(uid, chapterId, durationSec) {
+      await client.commit([{
+        update: { name: client.documentName(`users/${uid}/chapterStats/${chapterId}`), fields: {} },
+        updateTransforms: [
+          { fieldPath: 'totalSec', increment: { integerValue: String(durationSec) } },
+          { fieldPath: 'lastStudiedAt', setToServerValue: 'REQUEST_TIME' },
+        ],
+      }]);
     },
-    async writeMonthlyLeaderboard(monthKey: string, total: number, users: number) {
-      await client.commit([
-        {
-          path: `analytics/leaderboard_monthly/${monthKey}`,
-          data: { totalDurationSec: { integerValue: String(total) }, activeUserCount: { integerValue: String(users) } },
-        },
+    async setActiveSession(uid, session, legacyClientStartTs) {
+      const data = typeof session === 'number'
+        ? { sessionId: crypto.randomUUID(), serverStartTs: session, clientStartTs: legacyClientStartTs ?? session }
+        : session;
+      await client.commit([partialWrite(`users/${uid}/activeSession/current`, { ...data, updatedAt: { __serverTimestamp: true } })]);
+    },
+    async getActiveSession(uid) {
+      const doc = await client.getDoc(`users/${uid}/activeSession/current`);
+      const fields = doc?.fields;
+      const sessionId = stringValue(fields?.sessionId);
+      const serverStartTs = intValue(fields?.serverStartTs);
+      const clientStartTs = intValue(fields?.clientStartTs);
+      if (!sessionId || serverStartTs === null || clientStartTs === null) return null;
+      return { sessionId, serverStartTs, clientStartTs };
+    },
+    async clearActiveSession(uid, sessionId) {
+      await client.commit([partialWrite(`users/${uid}/activeSession/current`, { sessionId: '', clearedAt: { __serverTimestamp: true } })]);
+    },
+    async getPaymentRequest(id) {
+      const doc = await client.getDoc(`paymentRequests/${id}`);
+      const uid = stringValue(doc?.fields?.uid);
+      const planId = stringValue(doc?.fields?.planId);
+      const status = stringValue(doc?.fields?.status);
+      if (!uid || !planId || (status !== 'pending' && status !== 'approved' && status !== 'rejected')) return null;
+      return { uid, planId, status, updateTime: doc?.updateTime } as PaymentRequest;
+    },
+    async setUserSubscription(uid, sub) {
+      await client.commit([partialWrite(`users/${uid}`, { subscription: sub, updatedAt: { __serverTimestamp: true } })]);
+    },
+    async markPaymentRequestApproved(id, by, atMs, updateTime) {
+      await client.commit([partialWrite(`paymentRequests/${id}`, { status: 'approved', approvedAt: atMs, approvedBy: by }, updateTime)]);
+    },
+    async adminExists(uid) { return (await client.getDoc(`admins/${uid}`)) !== null; },
+    async exportUserData(uid) {
+      const [profile, syllabus, sessions, tasks, settings] = await Promise.all([
+        client.getDoc(`users/${uid}`),
+        client.listCollection(`users/${uid}/syllabus`, { pageSize: '1000' }),
+        client.listCollection(`users/${uid}/sessions`, { pageSize: '1000' }),
+        client.listCollection(`users/${uid}/upcomingTasks`, { pageSize: '1000' }),
+        client.getDoc(`users/${uid}/meta/settings`),
       ]);
-    },
-    async listActiveSessions() {
-      return [];
-    },
-    async writeNonce(_uid, _nonceId, _expiresAt) {
-      return;
-    },
-    async listUpcomingTasksForReminders(_now, _oneHourLater) {
-      return [];
-    },
-    async sendPush(_token, _title, _body, _data) {
-      return;
-    },
-    async listFcmTokens(_uid) {
-      return [];
-    },
-    async listPendingTasksForDailyPlan(_uid, _now) {
-      return [];
-    },
-    async writeDailyPlan(_uid, _blocks) {
-      return;
-    },
-    async listAllUids() {
-      const out = await client.listCollection(`users`, { pageSize: '1000' });
-      return (out.documents ?? []).map((d: { name: string }) => d.name.split('/').pop() ?? '').filter(Boolean);
+      return {
+        profile: documentData(profile),
+        syllabus: syllabus.map(documentData).filter((value): value is Record<string, unknown> => value !== null),
+        sessions: sessions.map(documentData).filter((value): value is Record<string, unknown> => value !== null),
+        tasks: tasks.map(documentData).filter((value): value is Record<string, unknown> => value !== null),
+        settings: documentData(settings),
+      } satisfies UserExport;
     },
   };
-})();
-
-// Avoid TS unused-warnings on the type-only imports.
-export type { SessionDoc, PaymentRequestDoc, SubscriptionDoc };
-
-/* ---------- internal helpers ---------- */
-
-function intValue(field: unknown): number | null {
-  if (!field || typeof field !== 'object') return null;
-  const f = field as { integerValue?: string };
-  if (typeof f.integerValue === 'string') return Number(f.integerValue);
-  return null;
 }
 
-/** Convert a plain JS object to Firestore REST field format. */
-function toFirestoreFields(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = toFirestoreValue(v);
-  }
-  return out;
+export function makeCronAdapters(creds: FirestoreCreds): CronAdapters {
+  const client = makeClient(creds);
+  return {
+    now: () => Date.now(),
+    async listBatches() { return (await client.listCollection('batches', { pageSize: '100' })).map((d) => ({ id: d.name.split('/').pop() ?? '', collegeStart: timestampValue(d.fields?.collegeStart), examStart: timestampValue(d.fields?.examStart), examEnd: timestampValue(d.fields?.examEnd) })); },
+    async writeBatchStatus(id, state: BatchState) { await client.commit([{ update: { name: client.documentName(`batches/${id}`), fields: toFirestoreFields({ status: state.kind }) }, updateMask: { fieldPaths: ['status'] }, updateTransforms: [{ fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' }] }]); },
+    async listTodaySessions(date) { return (await client.listCollection(`analytics/leaderboard_daily/${date}/users`, { pageSize: '1000' })).map((d) => ({ uid: d.name.split('/').pop() ?? '', durationSec: intValue(d.fields?.durationSec) ?? 0 })); },
+    async writeMonthlyLeaderboard(monthKey, totalDurationSec, activeUserCount) { await client.commit([{ update: { name: client.documentName(`analytics/leaderboard_monthly/${monthKey}`), fields: toFirestoreFields({ totalDurationSec, activeUserCount }) } }]); },
+    async listActiveSessions() { return []; },
+    async writeNonce() { return; },
+    async listUpcomingTasksForReminders() { return []; },
+    async sendPush() { return; },
+    async listFcmTokens() { return []; },
+    async listPendingTasksForDailyPlan() { return []; },
+    async writeDailyPlan() { return; },
+    async listAllUids() { return (await client.listCollection('users', { pageSize: '1000' })).map((d) => d.name.split('/').pop() ?? '').filter(Boolean); },
+  };
 }
 
-function toFirestoreValue(v: unknown): Record<string, unknown> {
-  if (v === null) return { nullValue: null };
-  if (typeof v === 'number') {
-    // Firestore REST distinguishes int vs double. Use integerValue for ints.
-    if (Number.isInteger(v)) return { integerValue: String(v) };
-    return { doubleValue: v };
-  }
-  if (typeof v === 'string') return { stringValue: v };
-  if (typeof v === 'boolean') return { booleanValue: v };
-  if (v instanceof Date) return { timestampValue: v.toISOString() };
-  if (typeof v === 'object' && v !== null) {
-    // Heuristic: serverTimestamp sentinel or explicit { increment: N }.
-    const obj = v as Record<string, unknown>;
-    if ('__serverTimestamp' in obj) return { timestampValue: new Date().toISOString() };
-    if ('increment' in obj && typeof obj.increment === 'number') {
-      return { integerValue: String(obj.increment) }; // Approximation — see note below.
-    }
-    return { mapValue: { fields: toFirestoreFields(obj) } };
-  }
-  return { stringValue: String(v) };
+function incrementWrite(name: string, values: Record<string, number>): Write {
+  return { update: { name, fields: {} }, updateTransforms: Object.entries(values).map(([fieldPath, value]) => ({ fieldPath, increment: { integerValue: String(value) } })) };
 }
-
-/**
- * NOTE: The Firestore REST API supports `updateTransform` for atomic
- * FieldValue.increment(). The shape above is a simplification for the
- * scaffold; real-world deployment needs `updateTransform.fieldTransforms`
- * entries. Session 8 will wire this up properly when we get a real
- * service-account JSON.
- */
-
-/**
- * Default adapter factory used by the router. Reads FIREBASE_PROJECT_ID
- * + a pre-minted access token (FIREBASE_ACCESS_TOKEN) from env. The
- * access token is rotated every ~60 min by a Workers cron in session 8.
- *
- * For unit tests, override via `__setFirestoreAdapterForTests`.
- */
-export const firestoreAdapter = makeRestAdapter({
-  projectId:
-    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
-      ?.FIREBASE_PROJECT_ID ?? 'test-project',
-  accessToken:
-    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
-      ?.FIREBASE_ACCESS_TOKEN ?? 'test-token',
-});
+function intValue(value: FirestoreValue | undefined): number | null { const raw = value?.integerValue ?? value?.doubleValue; return typeof raw === 'string' || typeof raw === 'number' ? Number(raw) : null; }
+function stringValue(value: FirestoreValue | undefined): string | null { return typeof value?.stringValue === 'string' ? value.stringValue : null; }
+function timestampValue(value: FirestoreValue | undefined): number { return typeof value?.timestampValue === 'string' ? new Date(value.timestampValue).getTime() : 0; }
+function documentData(doc: FirestoreDocument | null): Record<string, unknown> | null { return doc?.fields ? Object.fromEntries(Object.entries(doc.fields).map(([key, value]) => [key, fromFirestoreValue(value)])) : null; }
+function fromFirestoreValue(value: FirestoreValue): unknown { if ('stringValue' in value || 'integerValue' in value || 'doubleValue' in value || 'booleanValue' in value || 'timestampValue' in value || 'nullValue' in value) return value.stringValue ?? (value.integerValue !== undefined ? Number(value.integerValue) : value.doubleValue ?? value.booleanValue ?? value.timestampValue ?? null); if (value.mapValue && typeof value.mapValue === 'object') return Object.fromEntries(Object.entries((value.mapValue as { fields?: Record<string, FirestoreValue> }).fields ?? {}).map(([k, v]) => [k, fromFirestoreValue(v)])); if (value.arrayValue && typeof value.arrayValue === 'object') return ((value.arrayValue as { values?: FirestoreValue[] }).values ?? []).map(fromFirestoreValue); return null; }
+function toFirestoreFields(data: Record<string, unknown>): Record<string, FirestoreValue> { return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, toFirestoreValue(value)])); }
+function toFirestoreValue(value: unknown): FirestoreValue { if (value === null) return { nullValue: null }; if (typeof value === 'string') return { stringValue: value }; if (typeof value === 'boolean') return { booleanValue: value }; if (typeof value === 'number') return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value }; if (value instanceof Date) return { timestampValue: value.toISOString() }; if (typeof value === 'object' && value !== null) { const object = value as Record<string, unknown>; if ('__serverTimestamp' in object) return { timestampValue: new Date().toISOString() }; return { mapValue: { fields: toFirestoreFields(object) } }; } return { stringValue: String(value) }; }

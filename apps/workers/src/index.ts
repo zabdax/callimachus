@@ -1,49 +1,36 @@
-import { app } from './router.js';
+import { createApp } from './router.js';
 import { cronTick } from './crons.js';
-import { cronAdapters } from './firebase-admin.js';
-import {
-  DAILY_PLAN_CRON,
-  HOURLY_CRON,
-  DAILY_MIDNIGHT_CRON,
-  NONCE_AND_REMINDER_CRON,
-} from './handlers/batchStatus.js';
-
-/**
- * Worker entrypoint. Session 6 adds cron-triggered handlers:
- *   - DAILY_PLAN_CRON (5am Asia/Dhaka): generate daily plans
- *   - HOURLY_CRON: roll up leaderboards
- *   - DAILY_MIDNIGHT_CRON: recompute batch states
- *   - NONCE_AND_REMINDER_CRON (every hour at :30): emit nonces + push reminders
- *
- * Per design §4 we bundle emitNonce + sendRevisionReminder into one
- * trigger to fit within Cloudflare's 5-cron free-tier limit.
- */
+import { makeCronAdapters } from './firebase-admin.js';
+import { requireWorkerConfig, type Env } from './env.js';
 
 export default {
-  async fetch(request: Request): Promise<Response> {
-    return app.fetch(request);
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
+      requireWorkerConfig(env);
+      return createApp(env).fetch(request, env, ctx);
+    } catch (error) {
+      console.error('worker configuration error', error);
+      return Response.json({ ok: false, error: 'service_unavailable' }, { status: 503 });
+    }
   },
 
-  // The `scheduled` handler routes by the cron name configured in
-  // wrangler.toml. wrangler passes the cron as the first arg.
-  async scheduled(controller: ScheduledController): Promise<void> {
-    // Wrangler gives us no programmatic way to know which cron fired.
-    // We dispatch by Date-based heuristics — all 4 run on different
-    // schedules so the dispatch is unambiguous.
-    const cr = new Date(controller.scheduledTime);
-    const m = cr.getUTCMinutes();
-    const h = cr.getUTCHours();
-    let schedule: string;
-    if (m === 0 && h !== 0) schedule = 'LEADERBOARD_ROLLUP';
-    else if (h === 0 && m === 0) schedule = 'BATCH_STATUS';
-    else if (h === 23 && m === 0) schedule = 'DAILY_PLAN';
-    else if (m === 30) schedule = 'NONCE_AND_REMINDER';
-    else schedule = 'UNKNOWN';
-    await cronTick(schedule, cronAdapters);
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    requireWorkerConfig(env);
+    const date = new Date(controller.scheduledTime);
+    const minute = date.getUTCMinutes();
+    const hour = date.getUTCHours();
+    const schedule = minute === 0 && hour !== 0
+      ? 'LEADERBOARD_ROLLUP'
+      : hour === 0 && minute === 0
+        ? 'BATCH_STATUS'
+        : hour === 23 && minute === 0
+          ? 'DAILY_PLAN'
+          : minute === 30
+            ? 'NONCE_AND_REMINDER'
+            : 'UNKNOWN';
+    await cronTick(schedule, makeCronAdapters({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN }));
   },
 };
-
-export { DAILY_PLAN_CRON, HOURLY_CRON, DAILY_MIDNIGHT_CRON, NONCE_AND_REMINDER_CRON };
 
 interface ScheduledController {
   scheduledTime: number;

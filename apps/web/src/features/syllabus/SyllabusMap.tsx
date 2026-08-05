@@ -10,10 +10,11 @@ export function SyllabusMap({ medium }: { medium: 'bangla' | 'english' }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const uid = user?.uid ?? '';
-  const { subjects = [], chapters = {}, loading, toggle } = useSyllabus(uid, medium);
+  const { subjects = [], chapters = {}, loading, error, toggle } = useSyllabus(uid, medium);
   if (!uid) return null;
-
-  if (loading) return <p>{t('common.loading')}</p>;
+  if (loading) return <p className="p-4 text-text-dim" role="status">{t('common.loading')}</p>;
+  if (error) return <p className="p-4 text-danger" role="alert">Could not load your syllabus. Please refresh and try again.</p>;
+  if (subjects.length === 0) return <p className="p-4 text-text-dim">No syllabus has been added for this batch yet.</p>;
 
   return (
     <section className="space-y-6 p-4 text-text">
@@ -42,13 +43,13 @@ export function SyllabusMap({ medium }: { medium: 'bangla' | 'english' }) {
                 return (
                   <li key={c.id} className="flex items-center justify-between py-2">
                     <span>{c.name}</span>
-                    <div className="flex gap-3">
+                    <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-wrap sm:justify-end">
                       {STAGES.map((stage) => (
                         <label key={stage} className="flex items-center gap-1 text-sm">
                           <input
                             type="checkbox"
                             checked={!!ch[stage]}
-                            aria-label={stage}
+                            aria-label={`${c.name}: ${t(`syllabus.${stage}`)}`}
                             onChange={() =>
                               void toggle({ subjectId: s.subjectId, chapterId: c.id, stage })
                             }

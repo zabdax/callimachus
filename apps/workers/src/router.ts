@@ -1,139 +1,69 @@
 import { Hono } from 'hono';
+import type { Env } from './env.js';
 import { requireAuth, requireAdmin, type AuthVariables } from './auth.js';
 import { processStudySession } from './handlers/processStudySession.js';
 import { sessionStart } from './handlers/sessionStart.js';
 import { approvePayment } from './handlers/approvePayment.js';
 import { requireUid, WorkerError } from './db.js';
+import { makeRestAdapter } from './firebase-admin.js';
 
-/**
- * Hono router for the Callimachus Worker. Plan 4 / session 1 ships only
- * the `/api/echo` smoke handler. Real endpoints (processStudySession,
- * approvePayment, generateSignedUploadUrl, etc.) land in sessions 2+
- * per `docs/superpowers/specs/2026-08-01-platform-migration-design.md`.
- *
- * Tests instantiate this router directly via Hono's `app.request()`
- * helper; the worker's `fetch` entrypoint wraps it for production.
- */
-export const app = new Hono();
+export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
+  const app = new Hono<{ Variables: AuthVariables }>();
+  const db = makeRestAdapter({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
+  const allowedOrigins = new Set((env.ALLOWED_ORIGINS || env.WORKERS_BASE).split(',').map((origin) => origin.trim()).filter(Boolean));
 
-app.get('/api/echo', (c) =>
-  c.json({
-    ok: true,
-    service: 'callimachus-workers',
-    ts: Date.now(),
-  }),
-);
+  app.use('*', async (c, next) => {
+    const origin = c.req.header('origin');
+    if (c.req.method === 'OPTIONS') {
+      if (!origin || !allowedOrigins.has(origin)) return c.text('Forbidden', 403);
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+    await next();
+    if (origin && allowedOrigins.has(origin)) {
+      const headers = corsHeaders(origin);
+      Object.entries(headers).forEach(([key, value]) => c.res.headers.set(key, value));
+    }
+  });
 
-// Session 2: protected `/api/private/me` returns the decoded uid + admin
-// claim after Firebase ID-token verification. Project id is read from
-// the FIREBASE_PROJECT_ID environment variable in production (configured
-// in wrangler.toml under [vars]); tests inject a placeholder.
-declare const process: { env: Record<string, string | undefined> };
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'test-project';
+  app.get('/api/echo', (c) => c.json({ ok: true, service: 'callimachus-workers', ts: Date.now() }));
+  app.get('/api/private/me', requireAuth(env.FIREBASE_PROJECT_ID), (c) => c.json({ ok: true, uid: c.get('uid'), admin: !!c.get('claims')?.admin }));
 
-app.get(
-  '/api/private/me',
-  requireAuth(PROJECT_ID),
-  (c) => {
-    const uid = c.get('uid');
-    const claims = c.get('claims');
-    return c.json({ ok: true, uid, admin: !!claims?.admin });
-  },
-);
+  app.post('/api/sessionStart', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
+    try {
+      const body = await readBody<{ clientStartTs?: unknown }>(c);
+      if (!Number.isSafeInteger(body.clientStartTs)) throw new WorkerError('invalid-argument', 'clientStartTs must be an integer timestamp');
+      return c.json({ data: await sessionStart(requireUid(c.get('claims')), { clientStartTs: body.clientStartTs as number }, db) });
+    } catch (error) { return workerErrorResponse(c, error); }
+  });
 
-// Session 3: ported callable endpoints. The Firestore adapter is
-// injected via getDb() — production wires the Admin SDK client in
-// src/firebase-admin.ts; tests inject a stub.
-async function getDb() {
-  const mod = await import('./firebase-admin.js');
-  return mod.firestoreAdapter;
+  app.post('/api/processStudySession', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
+    try {
+      const body = await readBody<Record<string, unknown>>(c);
+      const uid = requireUid(c.get('claims'));
+      return c.json({ data: await processStudySession(uid, body as never, db, c.req.header('user-agent') ?? 'unknown') });
+    } catch (error) { return workerErrorResponse(c, error); }
+  });
+
+  app.post('/api/getUserData', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
+    try { return c.json({ data: { ...(await db.exportUserData(requireUid(c.get('claims')))), exportedAt: Date.now() } }); }
+    catch (error) { return workerErrorResponse(c, error); }
+  });
+
+  app.post('/api/approvePayment', requireAuth(env.FIREBASE_PROJECT_ID), requireAdmin(), async (c) => {
+    try {
+      const body = await readBody<{ paymentRequestId?: unknown }>(c);
+      if (typeof body.paymentRequestId !== 'string') throw new WorkerError('invalid-argument', 'paymentRequestId required');
+      const adminUid = requireUid(c.get('claims'));
+      return c.json({ data: await approvePayment(adminUid, { paymentRequestId: body.paymentRequestId }, db, { isAdmin: (uid) => db.adminExists(uid) }, { log: async () => undefined }) });
+    } catch (error) { return workerErrorResponse(c, error); }
+  });
+
+  app.notFound((c) => c.json({ ok: false, error: 'not_found', path: new URL(c.req.url).pathname }, 404));
+  return app;
 }
 
-app.post('/api/sessionStart', requireAuth(PROJECT_ID), async (c) => {
-  const claims = c.get('claims');
-  const uid = requireUid(claims);
-  try {
-    const body = (await c.req.json().catch(() => ({}))) as { data?: { clientStartTs?: number } };
-    const clientStartTs = body.data?.clientStartTs ?? Date.now();
-    const out = await sessionStart(uid, { clientStartTs }, await getDb());
-    return c.json({ data: out });
-  } catch (e) {
-    const w = e instanceof WorkerError ? e.toResponse() : { status: 500, body: { ok: false, error: 'internal', message: (e as Error).message } };
-    return c.json(w.body, w.status as 500);
-  }
-});
+function corsHeaders(origin: string): Record<string, string> { return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }; }
+async function readBody<T>(c: { req: { json: () => Promise<unknown> } }): Promise<T> { const body = await c.req.json().catch(() => null); if (!body || typeof body !== 'object' || Array.isArray(body)) throw new WorkerError('invalid-argument', 'invalid JSON body'); const value = (body as { data?: unknown }).data ?? body; if (!value || typeof value !== 'object' || Array.isArray(value)) throw new WorkerError('invalid-argument', 'invalid request data'); return value as T; }
+function workerErrorResponse(c: { json: (body: unknown, status?: number) => Response }, error: unknown): Response { if (error instanceof WorkerError) { const out = error.toResponse(); return c.json(out.body, out.status); } console.error('worker request failed', error); return c.json({ ok: false, error: 'internal', message: 'Request could not be completed' }, 500); }
 
-app.post('/api/processStudySession', requireAuth(PROJECT_ID), async (c) => {
-  const claims = c.get('claims');
-  const uid = requireUid(claims);
-  try {
-    const body = (await c.req.json()) as { data: Parameters<typeof processStudySession>[1] };
-    const ua = c.req.header('user-agent') ?? 'unknown';
-    const out = await processStudySession(uid, body.data, await getDb(), ua);
-    return c.json({ data: out });
-  } catch (e) {
-    const w = e instanceof WorkerError ? e.toResponse() : { status: 500, body: { ok: false, error: 'internal', message: (e as Error).message } };
-    return c.json(w.body, w.status as 500);
-  }
-});
-
-// Session 4 (revised): admin approval only.
-// Per Plan 4 no-screenshot decision (R2 skipped), the signed-upload
-// endpoint is removed. Admins review bKash TrxIDs via WhatsApp.
-
-async function getAdmins() {
-  const mod = await import('./firebase-admin.js');
-  return {
-    isAdmin: (uid: string) => mod.firestoreAdapter
-      // Use a private helper — expose isAdmin via getDoc on /admins/{uid}.
-      .getPaymentRequest(`__admin_probe__/${uid}`)
-      .then(() => true)
-      .catch(() => false),
-  };
-}
-
-async function getAudit() {
-  return {
-    log: async (entry: Parameters<NonNullable<Parameters<typeof approvePayment>[4]>['log']>[0]) => {
-      // Audit log: write to /audit/{autoId} via Firestore REST. For
-      // scaffold we use a stable id derived from the timestamp+target.
-      // Session 8 will switch this to the :commit auto-id endpoint.
-      const id = `${entry.at ?? Date.now()}-${entry.target}`;
-      await fetch(
-        `https://firestore.googleapis.com/v1/projects/${process.env.FIREBASE_PROJECT_ID ?? 'test'}/databases/(default)/documents/audit?id=${encodeURIComponent(id)}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.FIREBASE_ACCESS_TOKEN ?? 'test-token'}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fields: { actor: { stringValue: entry.actor }, action: { stringValue: entry.action }, target: { stringValue: entry.target } } }),
-        },
-      );
-    },
-  };
-}
-
-app.post('/api/approvePayment', requireAuth(PROJECT_ID), requireAdmin(), async (c) => {
-  const claims = c.get('claims');
-  const adminUid = requireUid(claims);
-  try {
-    const body = (await c.req.json()) as { data: { paymentRequestId: string } };
-    const out = await approvePayment(
-      adminUid,
-      body.data,
-      await getDb(),
-      await getAdmins(),
-      await getAudit(),
-    );
-    return c.json({ data: out });
-  } catch (e) {
-    const w = e instanceof WorkerError ? e.toResponse() : { status: 500, body: { ok: false, error: 'internal', message: (e as Error).message } };
-    return c.json(w.body, w.status as 500);
-  }
-});
-
-// Catch-all 404 in JSON shape so client error handling is consistent.
-app.notFound((c) =>
-  c.json({ ok: false, error: 'not_found', path: new URL(c.req.url).pathname }, 404),
-);
+export const app = createApp({ ENVIRONMENT: 'development', FIREBASE_PROJECT_ID: 'test-project', FIREBASE_ACCESS_TOKEN: 'test-token', WORKERS_BASE: '', ALLOWED_ORIGINS: '', TRACKER_CACHE: undefined as unknown as KVNamespace });

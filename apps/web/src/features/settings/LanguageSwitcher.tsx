@@ -22,7 +22,7 @@ export function LanguageSwitcher() {
         aria-label={t('settings.language')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-slate-300 px-2 py-1 bg-white"
+        className="rounded-md border border-surface-2 bg-surface px-2 py-1 text-text"
       >
         <option value="en">{t('settings.language.en')}</option>
         <option value="bn">{t('settings.language.bn')}</option>

@@ -1,55 +1,11 @@
 import { useState } from 'react';
 import { useTimeBlocks } from './useTimeBlocks';
 import type { TimeBlock } from './blocks';
-
-const HOURS = Array.from({ length: 18 }, (_, i) => 6 + i); // 06:00 .. 23:00
-
-function todayKey(): string {
-  // BST date YYYY-MM-DD using Intl with explicit timeZone.
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
-}
-
+const HOURS = Array.from({ length: 18 }, (_, index) => 6 + index);
+function todayKey() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date()); }
 export function TimeBlockTimeline({ uid }: { uid: string }) {
-  const date = todayKey();
-  const { data: blocks = [], add, complete } = useTimeBlocks(uid, date);
-  const [picked, setPicked] = useState<{ startHour: number; durationMin: number } | null>(null);
-
-  const onSlotClick = (h: number) => {
-    setPicked({ startHour: h, durationMin: 30 });
-  };
-
-  const onAdd = (subjectId: string, chapterId: string) => {
-    if (!picked) return;
-    add.mutate({ date, startHour: picked.startHour, durationMin: picked.durationMin, subjectId, chapterId, source: 'manual' });
-    setPicked(null);
-  };
-
-  return (
-    <div className="grid grid-cols-[60px_1fr] gap-2 p-4">
-      {HOURS.map((h) => (
-        <div key={h} className="contents">
-          <div className="text-text-dim text-sm">{String(h).padStart(2, '0')}:00</div>
-          <button onClick={() => onSlotClick(h)} className="rounded border border-surface-2 bg-surface p-2 text-left text-text">
-            {blocks.filter((b: TimeBlock) => b.startHour === h).map((b) => (
-              <div key={b.id} className="flex items-center justify-between">
-                <span>{b.subjectId} · {b.chapterId}</span>
-                {b.completedAt
-                  ? <span className="text-success">✓</span>
-                  : <button onClick={(e) => { e.stopPropagation(); complete.mutate(b.id); }} className="text-primary">complete</button>}
-              </div>
-            ))}
-            {picked?.startHour === h && <span className="text-text-dim">+ new 30m</span>}
-          </button>
-        </div>
-      ))}
-      {picked && (
-        <div className="col-span-2 rounded bg-surface-2 p-2">
-          <p>Add a 30m block at {String(picked.startHour).padStart(2, '0')}:00</p>
-          <input id="sbj" placeholder="subjectId" className="rounded border p-1" />
-          <input id="chp" placeholder="chapterId" className="rounded border p-1" />
-          <button onClick={() => onAdd((document.getElementById('sbj') as HTMLInputElement).value, (document.getElementById('chp') as HTMLInputElement).value)} className="ml-2 rounded bg-primary px-2 text-white">Add</button>
-        </div>
-      )}
-    </div>
-  );
+  const date = todayKey(); const { data: blocks = [], add, complete } = useTimeBlocks(uid, date);
+  const [picked, setPicked] = useState<number | null>(null); const [subjectId, setSubjectId] = useState(''); const [chapterId, setChapterId] = useState('');
+  const onAdd = () => { if (picked === null || !subjectId.trim() || !chapterId.trim()) return; add.mutate({ date, startHour: picked, durationMin: 30, subjectId: subjectId.trim(), chapterId: chapterId.trim(), source: 'manual' }); setPicked(null); setSubjectId(''); setChapterId(''); };
+  return <div className="grid grid-cols-[3.5rem_1fr] gap-2 p-4">{HOURS.map((hour) => <div key={hour} className="contents"><div className="pt-2 text-sm text-text-dim">{String(hour).padStart(2, '0')}:00</div><div className="min-h-14 rounded-lg border border-surface-2 bg-surface p-2 text-text"><button type="button" aria-label={`Add study block at ${String(hour).padStart(2, '0')}:00`} onClick={() => setPicked(hour)} className="w-full text-left">{blocks.filter((block: TimeBlock) => block.startHour === hour).map((block) => <div key={block.id} className="flex flex-wrap items-center justify-between gap-2"><span>{block.subjectId} · {block.chapterId}</span>{block.completedAt ? <span className="text-success" aria-label="Completed">✓</span> : <button type="button" onClick={(event) => { event.stopPropagation(); complete.mutate(block.id); }} className="text-primary">Complete</button>}</div>)}{picked === hour && <span className="text-sm text-text-dim">+ new 30m block</span>}</button></div></div>)}{picked !== null && <div className="col-span-2 space-y-3 rounded-lg bg-surface-2 p-3"><p className="font-medium">Add a 30-minute block at {String(picked).padStart(2, '0')}:00</p><div className="grid gap-2 sm:grid-cols-2"><label className="text-sm">Subject<input value={subjectId} onChange={(event) => setSubjectId(event.target.value)} className="mt-1 w-full rounded border border-surface-2 bg-surface p-2" /></label><label className="text-sm">Chapter<input value={chapterId} onChange={(event) => setChapterId(event.target.value)} className="mt-1 w-full rounded border border-surface-2 bg-surface p-2" /></label></div><button type="button" disabled={!subjectId.trim() || !chapterId.trim() || add.isPending} onClick={onAdd} className="rounded bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">{add.isPending ? 'Adding…' : 'Add block'}</button></div>}</div>;
 }

@@ -1,10 +1,5 @@
 import type { FirebaseClaims } from './auth';
 
-/**
- * Firestore document shapes used by the handlers. These mirror the
- * Plan 1+2 schemas and the existing rules. Keep field names identical
- * so the Firestore rules and the web client work without changes.
- */
 export type SessionDoc = {
   startedAtMs: number;
   endedAtMs: number;
@@ -12,7 +7,7 @@ export type SessionDoc = {
   date: string;
   presenceChecks: number;
   device: { ua: string; platform: string };
-  createdAt: unknown; // serverTimestamp sentinel
+  createdAt: unknown;
   chapterId: string | null;
 };
 
@@ -21,7 +16,6 @@ export type PaymentRequestDoc = {
   planId: string;
   status: 'pending' | 'approved' | 'rejected';
   trxId: string;
-  storagePath?: string;
   createdAt?: unknown;
   approvedAt?: number;
   approvedBy?: string;
@@ -34,59 +28,66 @@ export type SubscriptionDoc = {
   paymentRequestId: string;
 };
 
-/**
- * A small abstract Firestore adapter that the handlers depend on.
- * Production code injects the Firebase Admin SDK client; tests inject
- * a stub. This keeps handlers pure-Node-compatible and unit-testable.
- */
+export type ActiveSession = {
+  sessionId: string;
+  serverStartTs: number;
+  clientStartTs: number;
+};
+
+export type PaymentRequest = {
+  uid: string;
+  planId: string;
+  status: PaymentRequestDoc['status'];
+  updateTime?: string;
+};
+
+export type UserExport = {
+  profile: Record<string, unknown> | null;
+  syllabus: Record<string, unknown>[];
+  sessions: Record<string, unknown>[];
+  tasks: Record<string, unknown>[];
+  settings: Record<string, unknown> | null;
+};
+
 export interface FirestoreAdapter {
   getLastSessionEndedAt(uid: string): Promise<number | null>;
   countTodaySessions(uid: string, date: string): Promise<number>;
   writeSession(uid: string, id: string, doc: SessionDoc): Promise<void>;
   incrementDailyLeaderboard(date: string, durationSec: number, uid: string): Promise<void>;
   incrementChapterStat(uid: string, chapterId: string, durationSec: number): Promise<void>;
-  setActiveSession(uid: string, serverStartTs: number, clientStartTs: number): Promise<void>;
-  getPaymentRequest(id: string): Promise<{ uid: string; planId: string } | null>;
+  setActiveSession(uid: string, session: ActiveSession | number, clientStartTs?: number): Promise<void>;
+  getActiveSession(uid: string): Promise<ActiveSession | null>;
+  clearActiveSession(uid: string, sessionId: string): Promise<void>;
+  getPaymentRequest(id: string): Promise<PaymentRequest | null>;
   setUserSubscription(uid: string, sub: SubscriptionDoc): Promise<void>;
-  markPaymentRequestApproved(id: string, by: string, atMs: number): Promise<void>;
+  markPaymentRequestApproved(id: string, by: string, atMs: number, updateTime?: string): Promise<void>;
+  adminExists(uid: string): Promise<boolean>;
+  exportUserData(uid: string): Promise<UserExport>;
 }
 
-/** A no-op adapter for tests. Each method must be overridable. */
 export class StubFirestore implements FirestoreAdapter {
-  getLastSessionEndedAt(_uid: string): Promise<number | null> {
-    return Promise.resolve(null);
-  }
-  countTodaySessions(_uid: string, _date: string): Promise<number> {
-    return Promise.resolve(0);
-  }
-  writeSession(_uid: string, _id: string, _doc: SessionDoc): Promise<void> {
-    return Promise.resolve();
-  }
-  incrementDailyLeaderboard(_date: string, _dur: number, _uid: string): Promise<void> {
-    return Promise.resolve();
-  }
-  incrementChapterStat(_uid: string, _cid: string, _dur: number): Promise<void> {
-    return Promise.resolve();
-  }
-  setActiveSession(_uid: string, _serverTs: number, _clientTs: number): Promise<void> {
-    return Promise.resolve();
-  }
-  getPaymentRequest(_id: string): Promise<{ uid: string; planId: string } | null> {
-    return Promise.resolve(null);
-  }
-  setUserSubscription(_uid: string, _sub: SubscriptionDoc): Promise<void> {
-    return Promise.resolve();
-  }
-  markPaymentRequestApproved(_id: string, _by: string, _at: number): Promise<void> {
-    return Promise.resolve();
+  getLastSessionEndedAt(_uid: string): Promise<number | null> { return Promise.resolve(null); }
+  countTodaySessions(_uid: string, _date: string): Promise<number> { return Promise.resolve(0); }
+  writeSession(_uid: string, _id: string, _doc: SessionDoc): Promise<void> { return Promise.resolve(); }
+  incrementDailyLeaderboard(_date: string, _dur: number, _uid: string): Promise<void> { return Promise.resolve(); }
+  incrementChapterStat(_uid: string, _cid: string, _dur: number): Promise<void> { return Promise.resolve(); }
+  setActiveSession(_uid: string, _session: ActiveSession | number, _clientStartTs?: number): Promise<void> { return Promise.resolve(); }
+  getActiveSession(_uid: string): Promise<ActiveSession | null> { return Promise.resolve(null); }
+  clearActiveSession(_uid: string, _sessionId: string): Promise<void> { return Promise.resolve(); }
+  getPaymentRequest(_id: string): Promise<PaymentRequest | null> { return Promise.resolve(null); }
+  setUserSubscription(_uid: string, _sub: SubscriptionDoc): Promise<void> { return Promise.resolve(); }
+  markPaymentRequestApproved(_id: string, _by: string, _at: number, _updateTime?: string): Promise<void> { return Promise.resolve(); }
+  adminExists(_uid: string): Promise<boolean> { return Promise.resolve(false); }
+  exportUserData(_uid: string): Promise<UserExport> {
+    return Promise.resolve({ profile: null, syllabus: [], sessions: [], tasks: [], settings: null });
   }
 }
 
-/** Standard validation errors mirror Firebase HttpsError semantics. */
 export class WorkerError extends Error {
   constructor(public code: 'unauthenticated' | 'invalid-argument' | 'failed-precondition' | 'resource-exhausted' | 'not-found' | 'permission-denied', message: string) {
     super(message);
   }
+
   toResponse(): { status: number; body: { ok: false; error: string; message: string } } {
     const map: Record<string, number> = {
       unauthenticated: 401,
@@ -101,6 +102,8 @@ export class WorkerError extends Error {
 }
 
 export function requireUid(claims: FirebaseClaims | undefined): string {
-  if (!claims?.sub) throw new WorkerError('unauthenticated', 'Sign in first');
+  if (!claims?.sub || typeof claims.sub !== 'string') {
+    throw new WorkerError('unauthenticated', 'Sign in first');
+  }
   return claims.sub;
 }
