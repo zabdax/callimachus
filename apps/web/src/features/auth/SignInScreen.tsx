@@ -37,10 +37,24 @@ export function SignInScreen() {
     }
   };
 
+  const onGoogleSignIn = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      // signInWithRedirect resolves when the redirect BEGINS, not when it
+      // completes. The actual auth result is delivered via
+      // AuthContext.onAuthStateChanged on the bounce-back.
+      await signInWithGoogle();
+    } catch (e) {
+      setError((e as Error).message ?? 'Google sign-in failed.');
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-4">
       <div className="flex flex-col gap-4 w-full max-w-sm">
-        <Button variant="primary" onClick={() => void signInWithGoogle()}>
+        <Button variant="primary" onClick={() => void onGoogleSignIn()} disabled={busy}>
           {t('auth.signInWithGoogle')}
         </Button>
 

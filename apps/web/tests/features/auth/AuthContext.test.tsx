@@ -13,6 +13,8 @@ vi.mock('firebase/auth', () => ({
     }
   },
   signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: 'u1' } }),
+  signInWithRedirect: vi.fn().mockResolvedValue(undefined),
+  getRedirectResult: vi.fn().mockResolvedValue(null),
   signOut: vi.fn(),
 }));
 
