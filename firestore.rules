@@ -36,8 +36,22 @@ service cloud.firestore {
       match /syllabus/{x}    { allow read, write: if isSelf(uid); }
       match /upcomingTasks/{x}{ allow read, write: if isSelf(uid); }
       match /meta/{x}        { allow read, write: if isSelf(uid); }
+      // Daily plan docs are written by the Workers cron (Admin REST bypasses
+      // rules); the client reads them for the "Today's plan" card.
+      match /dailyPlan/{x}   { allow read, write: if isSelf(uid); }
+      match /timeBlocks/{x}  { allow read, write: if isSelf(uid); }
       match /activeSession/{x} { allow read: if isSelf(uid) || isAdmin(); allow write: if false; }
-      match /fcmTokens/{x}   { allow read, write: if isSelf(uid); }
+      match /chapterStats/{x}  { allow read: if isSelf(uid) || isAdmin(); allow write: if false; }
+      // The doc ID is the FCM token itself — constrain shape/size so the
+      // collection can't be abused as free-form storage.
+      match /fcmTokens/{tokenId} {
+        allow read: if isSelf(uid);
+        allow create, update: if isSelf(uid)
+          && tokenId.matches('^[A-Za-z0-9:_-]{1,200}$')
+          && request.resource.data.token == tokenId
+          && keysOnly(['token', 'platform', 'createdAt', 'updatedAt']);
+        allow delete: if isSelf(uid);
+      }
     }
 
     match /paymentRequests/{id} {
@@ -45,7 +59,17 @@ service cloud.firestore {
       allow create: if isSignedIn() && validPaymentCreate();
       allow update, delete: if false;
     }
-    match /analytics/{x=**} { allow read: if isSignedIn(); allow write: if false; }
+    // Leaderboard docs are written only by the Workers (Admin REST bypasses
+    // rules). Totals are readable by any signed-in user; the per-user
+    // breakdown docs carry private study data, so they are visible only to
+    // the owning user and admins. A public top-N leaderboard should be
+    // served from the Worker, not from these subcollections.
+    match /analytics/leaderboard {
+      match /daily/{date} { allow read: if isSignedIn(); allow write: if false; }
+      match /daily/{date}/users/{docUid} { allow read: if isAdmin() || isSelf(docUid); allow write: if false; }
+      match /monthly/{month} { allow read: if isSignedIn(); allow write: if false; }
+      match /monthly/{month}/users/{docUid} { allow read: if isAdmin() || isSelf(docUid); allow write: if false; }
+    }
     match /admins/{uid}   { allow read: if isSignedIn() && (isSelf(uid) || isAdmin()); allow write: if false; }
     match /batches/{x}    { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /syllabus/{x}   { allow read: if isSignedIn(); allow write: if false; }
