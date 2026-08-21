@@ -5,6 +5,9 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege — jobs don't need the default GITHUB_TOKEN scopes.
+permissions: {}
+
 jobs:
   build-test:
     runs-on: ubuntu-latest

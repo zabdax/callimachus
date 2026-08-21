@@ -84,7 +84,9 @@ if (!skipBuild) {
   run('npm run build', 'apps/workers');
 }
 
-if (wants('kv') && !skipPages) {
+if (wants('kv')) {
+  // KV is required by the Worker (presence nonces + leaderboard cache) and
+  // is independent of Pages, so it must not be skipped by --skip-pages.
   run(
     `npx wrangler kv:namespace create TRACKER_CACHE || echo "namespace may already exist"`,
     'apps/workers',
