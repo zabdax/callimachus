@@ -28,7 +28,9 @@ describe('OnboardingForm', () => {
     fireEvent.click(screen.getByLabelText(/Bangla Medium/i));
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
-    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'HSC-2026' } });
+    // HSC-2026 already resulted, so it must not be offered — pick HSC-2027.
+    expect(screen.queryByRole('option', { name: 'HSC 2026' })).toBeNull();
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'HSC-2027' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
     fireEvent.change(screen.getByLabelText(/college/i), {
@@ -39,10 +41,13 @@ describe('OnboardingForm', () => {
     await waitFor(() =>
       expect(onDone).toHaveBeenCalledWith({
         college: 'Dhaka College',
-        batchId: 'HSC-2026',
+        batchId: 'HSC-2027',
         medium: 'bangla',
       }),
     );
     expect(setDocMock).toHaveBeenCalled();
+    // Re-submitting onboarding must not clobber an existing profile name.
+    const payload = setDocMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('displayName');
   });
 });

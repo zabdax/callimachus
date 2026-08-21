@@ -23,12 +23,14 @@ describe('pacePct', () => {
 });
 
 describe('remainingDays', () => {
-  it('rounds up fractional days', () => {
-    // Plan typo: original `'2026-06-29T01:00:00+06:00'` is only 23h before examStart,
-    // so Math.ceil(23/24) = 1, not 2. Using 2026-06-28T13:00:00+06:00 (35h = 1.458 days)
-    // preserves the "fractional" intent and yields 2 via Math.ceil.
+  it('floors fractional days (35h left = "1 day", not 2)', () => {
+    // 2026-06-28T13:00:00+06:00 is 35h = 1.458 days before examStart.
+    // Floor, not ceil: an exam 1 hour away must read "0 days", not "1".
     const r = remainingDays(batch, new Date('2026-06-28T13:00:00+06:00'));
-    expect(r).toBe(2);
+    expect(r).toBe(1);
+  });
+  it('is 0 within the final 24h before examStart', () => {
+    expect(remainingDays(batch, new Date('2026-06-29T12:00:00+06:00'))).toBe(0);
   });
   it('is 0 after examStart', () => {
     expect(remainingDays(batch, new Date('2026-07-15T00:00:00+06:00'))).toBe(0);

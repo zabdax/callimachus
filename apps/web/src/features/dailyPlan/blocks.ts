@@ -29,17 +29,17 @@ export function hasConflict(blocks: TimeBlock[], candidate: TimeBlock): boolean 
 
 export async function listTimeBlocks(uid: string, date: string) {
   const db = getFirestore(app);
-  const q = query(collection(db, `users/${uid}/meta/timeBlocks`), where('date', '==', date));
+  const q = query(collection(db, `users/${uid}/timeBlocks`), where('date', '==', date));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, uid, ...(d.data() as Omit<TimeBlock, 'id' | 'uid'>) })) as TimeBlock[];
 }
 
 export async function addBlock(uid: string, b: Omit<TimeBlock, 'id' | 'uid' | 'completedAt'>) {
   const db = getFirestore(app);
-  return addDoc(collection(db, `users/${uid}/meta/timeBlocks`), { ...b, completedAt: null, createdAt: serverTimestamp() });
+  return addDoc(collection(db, `users/${uid}/timeBlocks`), { ...b, completedAt: null, createdAt: serverTimestamp() });
 }
 
 export async function completeBlock(uid: string, id: string) {
   const db = getFirestore(app);
-  await updateDoc(doc(db, `users/${uid}/meta/timeBlocks/${id}`), { completedAt: serverTimestamp() });
+  await updateDoc(doc(db, `users/${uid}/timeBlocks/${id}`), { completedAt: serverTimestamp() });
 }

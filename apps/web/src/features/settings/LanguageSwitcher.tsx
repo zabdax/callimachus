@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
-
-const STORAGE_KEY = 'app.lang';
+import { LANG_STORAGE_KEY } from '@/lib/i18n';
 
 export function LanguageSwitcher() {
   const { i18n, t } = useTranslation();
@@ -9,7 +8,7 @@ export function LanguageSwitcher() {
   const onChange = (lng: string) => {
     void i18n.changeLanguage(lng);
     try {
-      localStorage.setItem(STORAGE_KEY, lng);
+      localStorage.setItem(LANG_STORAGE_KEY, lng);
     } catch {
       // localStorage unavailable (private mode) — silently fall back
     }

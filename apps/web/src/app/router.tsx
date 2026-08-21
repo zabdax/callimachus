@@ -56,9 +56,6 @@ const router = createBrowserRouter([
         </RequireAdmin>
       </RequireAuth>
     ),
-    children: [
-      { index: true, element: <ApprovalQueue /> },
-    ],
   },
   // Dev-only route. Only mounted when VITE_ENABLE_TEST_ROUTES is set.
   // Production builds (no env) never include it.
