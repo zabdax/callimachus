@@ -1,4 +1,11 @@
-export type AnchorRecord = { startTs: number; pausedAccumMs: number; serverStartTs: number; sessionId?: string };
+export type AnchorRecord = {
+  startTs: number;
+  pausedAccumMs: number;
+  serverStartTs: number;
+  sessionId?: string;
+  /** Present while the timer is paused; null/absent means running. */
+  pausedAt?: number | null;
+};
 
 const LS_KEY = (uid: string) => `hsc:timer:${uid}`;
 

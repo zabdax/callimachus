@@ -25,15 +25,34 @@ export async function replayPending(uid: string) {
         q,
       );
       await removeQueued(q.id);
-    } catch {
-      // still offline — keep
+    } catch (e) {
+      if (e instanceof WorkerError && e.status < 500) {
+        // Rejected by validation (overlap, cap, bad payload) — retrying on
+        // every reconnect would poison the queue forever, so drop it.
+        await removeQueued(q.id);
+        continue;
+      }
+      // still offline / server error — keep for the next replay
     }
   }
 }
 
+let getReplayUid: (() => string | null) | null = null;
+
+/**
+ * Wires queued-session replay to the signed-in user. Replays once on
+ * registration (app start / login) and again on every `online` event,
+ * so queued sessions don't sit until the next connectivity flap.
+ */
+export function registerOfflineReplay(resolver: () => string | null): void {
+  getReplayUid = resolver;
+  const uid = resolver();
+  if (uid) void replayPending(uid);
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    const uid = (window as unknown as { __hscUid?: string }).__hscUid;
+    const uid = getReplayUid?.();
     if (uid) void replayPending(uid);
   });
 }
