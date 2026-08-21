@@ -5,11 +5,12 @@ import { processStudySession } from './handlers/processStudySession.js';
 import { sessionStart } from './handlers/sessionStart.js';
 import { approvePayment } from './handlers/approvePayment.js';
 import { requireUid, WorkerError } from './db.js';
-import { makeRestAdapter } from './firebase-admin.js';
+import { makeRestAdapter, makeAuditLogger } from './firebase-admin.js';
 
 export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   const app = new Hono<{ Variables: AuthVariables }>();
   const db = makeRestAdapter({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
+  const audit = makeAuditLogger({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
   const allowedOrigins = new Set((env.ALLOWED_ORIGINS || env.WORKERS_BASE).split(',').map((origin) => origin.trim()).filter(Boolean));
 
   app.use('*', async (c, next) => {
@@ -54,7 +55,7 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
       const body = await readBody<{ paymentRequestId?: unknown }>(c);
       if (typeof body.paymentRequestId !== 'string') throw new WorkerError('invalid-argument', 'paymentRequestId required');
       const adminUid = requireUid(c.get('claims'));
-      return c.json({ data: await approvePayment(adminUid, { paymentRequestId: body.paymentRequestId }, db, { isAdmin: (uid) => db.adminExists(uid) }, { log: async () => undefined }) });
+      return c.json({ data: await approvePayment(adminUid, { paymentRequestId: body.paymentRequestId }, db, { isAdmin: (uid) => db.adminExists(uid) }, audit) });
     } catch (error) { return workerErrorResponse(c, error); }
   });
 

@@ -32,6 +32,8 @@ export type ActiveSession = {
   sessionId: string;
   serverStartTs: number;
   clientStartTs: number;
+  /** Firestore updateTime of the activeSession doc — used as a CAS precondition on clear. */
+  updateTime?: string;
 };
 
 export type PaymentRequest = {
@@ -57,8 +59,10 @@ export interface FirestoreAdapter {
   incrementChapterStat(uid: string, chapterId: string, durationSec: number): Promise<void>;
   setActiveSession(uid: string, session: ActiveSession | number, clientStartTs?: number): Promise<void>;
   getActiveSession(uid: string): Promise<ActiveSession | null>;
-  clearActiveSession(uid: string, sessionId: string): Promise<void>;
+  /** Clears the active session; when updateTime is given the clear is conditional (concurrency-safe). */
+  clearActiveSession(uid: string, sessionId: string, updateTime?: string): Promise<void>;
   getPaymentRequest(id: string): Promise<PaymentRequest | null>;
+  getUserSubscription(uid: string): Promise<SubscriptionDoc | null>;
   setUserSubscription(uid: string, sub: SubscriptionDoc): Promise<void>;
   markPaymentRequestApproved(id: string, by: string, atMs: number, updateTime?: string): Promise<void>;
   adminExists(uid: string): Promise<boolean>;
@@ -73,8 +77,9 @@ export class StubFirestore implements FirestoreAdapter {
   incrementChapterStat(_uid: string, _cid: string, _dur: number): Promise<void> { return Promise.resolve(); }
   setActiveSession(_uid: string, _session: ActiveSession | number, _clientStartTs?: number): Promise<void> { return Promise.resolve(); }
   getActiveSession(_uid: string): Promise<ActiveSession | null> { return Promise.resolve(null); }
-  clearActiveSession(_uid: string, _sessionId: string): Promise<void> { return Promise.resolve(); }
+  clearActiveSession(_uid: string, _sessionId: string, _updateTime?: string): Promise<void> { return Promise.resolve(); }
   getPaymentRequest(_id: string): Promise<PaymentRequest | null> { return Promise.resolve(null); }
+  getUserSubscription(_uid: string): Promise<SubscriptionDoc | null> { return Promise.resolve(null); }
   setUserSubscription(_uid: string, _sub: SubscriptionDoc): Promise<void> { return Promise.resolve(); }
   markPaymentRequestApproved(_id: string, _by: string, _at: number, _updateTime?: string): Promise<void> { return Promise.resolve(); }
   adminExists(_uid: string): Promise<boolean> { return Promise.resolve(false); }

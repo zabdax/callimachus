@@ -6,6 +6,8 @@ class StubAdapters implements CronAdapters {
   batches: Array<{ id: string; collegeStart: number; examStart: number; examEnd: number }> = [];
   batchWrites: Array<{ id: string; state: unknown }> = [];
   todaySessions: Array<{ uid: string; durationSec: number }> = [];
+  monthSessions: Array<{ uid: string; durationSec: number }> = [];
+  dailyAggregateWrites: Array<{ date: string; activeUsers: number }> = [];
   monthlyWrites: Array<{ monthKey: string; total: number; users: number }> = [];
   active: Array<{ uid: string }> = [];
   nonces: Array<{ uid: string; nonceId: string; expiresAt: number }> = [];
@@ -19,7 +21,11 @@ class StubAdapters implements CronAdapters {
   async listBatches() { return this.batches; }
   async writeBatchStatus(id: string, state: unknown) { this.batchWrites.push({ id, state }); }
   async listTodaySessions(_d: string) { return this.todaySessions; }
-  async writeMonthlyLeaderboard(monthKey: string, totalDurationSec: number, activeUsers: number) {
+  async listMonthSessions(_m: string) { return this.monthSessions; }
+  async writeDailyLeaderboardAggregate(date: string, activeUsers: number) {
+    this.dailyAggregateWrites.push({ date, activeUsers });
+  }
+  async writeMonthlyLeaderboardAggregate(monthKey: string, totalDurationSec: number, activeUsers: number) {
     this.monthlyWrites.push({ monthKey, total: totalDurationSec, users: activeUsers });
   }
   async listActiveSessions() { return this.active; }
@@ -54,15 +60,28 @@ describe('cronTick', () => {
     expect(a.batchWrites[0]?.state).toMatchObject({ kind: 'in-session' });
   });
 
-  it('LEADERBOARD_ROLLUP: sums durations + unique users', async () => {
+  it('LEADERBOARD_ROLLUP: writes daily activeUsers + reconciled monthly totals', async () => {
+    // 1_700_000_000_000 UTC = 2023-11-14 18:13 UTC → Asia/Dhaka 2023-11-15.
     a.todaySessions = [
       { uid: 'u1', durationSec: 600 },
       { uid: 'u1', durationSec: 300 },
       { uid: 'u2', durationSec: 120 },
     ];
+    a.monthSessions = [
+      { uid: 'u1', durationSec: 900 },
+      { uid: 'u2', durationSec: 120 },
+    ];
     await cronTick('LEADERBOARD_ROLLUP', a);
-    expect(a.monthlyWrites).toHaveLength(1);
-    expect(a.monthlyWrites[0]).toMatchObject({ total: 1020, users: 2 });
+    expect(a.dailyAggregateWrites).toEqual([{ date: '2023-11-15', activeUsers: 2 }]);
+    expect(a.monthlyWrites).toEqual([{ monthKey: '2023-11', total: 1020, users: 2 }]);
+  });
+
+  it('LEADERBOARD_ROLLUP: uses the BST date key, not UTC', async () => {
+    // 18:00–23:59 UTC is already "tomorrow" in Asia/Dhaka.
+    a.now = () => Date.UTC(2023, 10, 14, 19, 0, 0); // BST 2023-11-15 01:00
+    await cronTick('LEADERBOARD_ROLLUP', a);
+    expect(a.dailyAggregateWrites[0]?.date).toBe('2023-11-15');
+    expect(a.monthlyWrites[0]?.monthKey).toBe('2023-11');
   });
 
   it('NONCE_AND_REMINDER: emits nonces for active + pushes for due tasks', async () => {

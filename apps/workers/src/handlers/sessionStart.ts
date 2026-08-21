@@ -1,7 +1,7 @@
 import type { FirestoreAdapter } from '../db';
 import { WorkerError } from '../db';
 
-const MAX_DRIFT_MS = 5 * 60_000;
+export const MAX_DRIFT_MS = 5 * 60_000;
 
 export type SessionStartInput = { clientStartTs: number };
 export type SessionStartOutput = { sessionId: string; serverStartTs: number };

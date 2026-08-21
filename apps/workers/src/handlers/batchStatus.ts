@@ -26,10 +26,11 @@ export function recomputeBatchStatus(
   examEnd: number,
 ): BatchState {
   if (now < collegeStart) {
-    return { kind: 'pre-start', daysToStart: Math.ceil((collegeStart - now) / 86_400_000) };
+    // Floor, not ceil: an event 1 hour away is "0 days", not "1 day".
+    return { kind: 'pre-start', daysToStart: Math.floor((collegeStart - now) / 86_400_000) };
   }
   if (now < examStart) {
-    return { kind: 'in-session', daysToExam: Math.ceil((examStart - now) / 86_400_000) };
+    return { kind: 'in-session', daysToExam: Math.floor((examStart - now) / 86_400_000) };
   }
   if (now <= examEnd) {
     return { kind: 'exam-window' };

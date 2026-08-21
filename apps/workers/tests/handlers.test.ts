@@ -9,6 +9,7 @@ class RecordingDb extends StubFirestore {
   count: Record<string, number> = {};
   lastEndedAt: number | null = null;
   activeSession = { sessionId: 's1', serverStartTs: 1_700_000_000_000, clientStartTs: 1_700_000_000_000 };
+  failClear = false;
 
   override getLastSessionEndedAt(): Promise<number | null> {
     return Promise.resolve(this.lastEndedAt);
@@ -22,7 +23,7 @@ class RecordingDb extends StubFirestore {
   }
   override incrementDailyLeaderboard(date: string, dur: number, uid: string): Promise<void> {
     this.writes.push({
-      path: `analytics/leaderboard_daily/${date}/users/${uid}`,
+      path: `analytics/leaderboard/daily/${date}/users/${uid}`,
       data: { durationSec: dur },
     });
     return Promise.resolve();
@@ -42,7 +43,8 @@ class RecordingDb extends StubFirestore {
   override getActiveSession(): Promise<{ sessionId: string; serverStartTs: number; clientStartTs: number } | null> {
     return Promise.resolve(this.activeSession);
   }
-  override clearActiveSession(): Promise<void> {
+  override clearActiveSession(_uid: string, _sessionId: string, _updateTime?: string): Promise<void> {
+    if (this.failClear) return Promise.reject(new Error('firestore COMMIT 409'));
     return Promise.resolve();
   }
 }
@@ -98,7 +100,7 @@ describe('processStudySession', () => {
     // 1 session write + 1 leaderboard doc
     const writes = db.writes.map((w) => w.path);
     expect(writes.some((p) => p.startsWith('users/u1/sessions/'))).toBe(true);
-    expect(writes.some((p) => p.startsWith('analytics/leaderboard_daily/'))).toBe(true);
+    expect(writes.some((p) => p.startsWith('analytics/leaderboard/daily/'))).toBe(true);
     expect(writes.some((p) => p.startsWith('users/u1/chapterStats/'))).toBe(true);
   });
 
@@ -140,5 +142,33 @@ describe('processStudySession', () => {
     await expect(processStudySession('u1', validInput(), db, 'ua')).rejects.toThrow(
       /active study session/,
     );
+  });
+
+  it('clamps a future clientEndedTs to server wall clock (+ drift tolerance)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(1_700_000_000_000 + 60_000)); // 1 min after start
+      const bad = { ...validInput(), clientEndedTs: validInput().clientStartTs + 6 * 3600 * 1000 - 1000 };
+      await processStudySession('u1', bad, db, 'ua');
+      const write = db.writes.find((w) => String(w.path).startsWith('users/u1/sessions/'));
+      // ~6 min credited (1 min elapsed + 5 min tolerance), not ~6 hours.
+      expect((write?.data as { durationSec: number }).durationSec).toBeLessThan(500);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('deducts pausedAccumMs from the credited duration', async () => {
+    const input = { ...validInput(), pausedAccumMs: 10 * 60_000 }; // 30 min wall, 10 min paused
+    await processStudySession('u1', input, db, 'ua');
+    const write = db.writes.find((w) => String(w.path).startsWith('users/u1/sessions/'));
+    expect((write?.data as { durationSec: number }).durationSec).toBe(20 * 60);
+  });
+
+  it('aborts without crediting when the active-session clear loses a race', async () => {
+    db.failClear = true;
+    await expect(processStudySession('u1', validInput(), db, 'ua')).rejects.toThrow();
+    expect(db.writes.some((w) => String(w.path).startsWith('users/u1/sessions/'))).toBe(false);
+    expect(db.writes.some((w) => String(w.path).startsWith('analytics/'))).toBe(false);
   });
 });
