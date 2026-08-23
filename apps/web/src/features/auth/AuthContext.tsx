@@ -1,10 +1,29 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
 import { app } from '@/lib/firebase/client';
 import { registerOfflineReplay } from '@/features/timer/stopAndSubmit';
 
-type AuthState = { user: User | null; loading: boolean; authError: Error | null };
-const Ctx = createContext<AuthState>({ user: null, loading: true, authError: null });
+type AuthState = {
+  user: User | null;
+  loading: boolean;
+  authError: Error | null;
+  clearAuthError: () => void;
+};
+const Ctx = createContext<AuthState>({
+  user: null,
+  loading: true,
+  authError: null,
+  clearAuthError: () => {},
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -44,7 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     registerOfflineReplay(() => userRef.current?.uid ?? null);
   }, []);
 
-  return <Ctx.Provider value={{ user, loading, authError }}>{children}</Ctx.Provider>;
+  const clearAuthError = useCallback(() => setAuthError(null), []);
+
+  return (
+    <Ctx.Provider value={{ user, loading, authError, clearAuthError }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAuth() {
