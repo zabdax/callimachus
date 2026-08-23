@@ -41,19 +41,26 @@ Firebase console → **Authentication → Settings → Authorized domains** → 
 
 ## 3. Cloudflare Worker — allow the new origin (mandatory)
 
-Protected actions (session submit, payment, export) send the Vercel origin
-to the Worker, which checks the `ALLOWED_ORIGINS` secret
-(`apps/workers/src/router.ts`). Append the Vercel origins, keeping the
-existing ones:
+Protected actions (session submit, payment, export) are CORS-checked by
+the Worker against the `ALLOWED_ORIGINS` **var** in
+`apps/workers/wrangler.toml` (it is not a secret — it stays versioned).
+Plain entries match exactly; `*.` / `*-` entries match any host with that
+suffix, so `*-<scope>.vercel.app` lets every preview deployment of the
+Vercel project through automatically. Edit the list, then ship it:
 
 ```bash
 cd apps/workers
-npx wrangler secret put ALLOWED_ORIGINS
-# value: https://<existing>,https://<project>.vercel.app,https://<project>-<hash>-<scope>.vercel.app
+npm run build
+npx wrangler deploy
 ```
 
-Preview deployments get per-branch URLs; either add them as they matter or
-use a custom domain per environment.
+Verify a preflight (expect `204` and the origin echoed back):
+
+```bash
+curl -i -X OPTIONS https://<worker-origin>/api/echo \
+  -H 'Origin: https://<project>.vercel.app' \
+  -H 'Access-Control-Request-Method: POST'
+```
 
 ## 4. Verify a deployment
 
