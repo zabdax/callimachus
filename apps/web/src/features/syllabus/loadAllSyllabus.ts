@@ -19,10 +19,12 @@ export async function loadAllSyllabus(
     ...(d.data() as Omit<SubjectDoc, 'subjectId'>),
   }));
 
-  const chapters: Record<string, ChaptersMap> = {};
-  for (const s of subjects) {
-    const userSyll = await getDoc(doc(db, `users/${uid}/syllabus/${s.subjectId}`));
-    chapters[s.subjectId] = userSyll.exists() ? (userSyll.data() as ChaptersMap) : {};
-  }
+  const chaptersEntries = await Promise.all(
+    subjects.map(async (s) => {
+      const userSyll = await getDoc(doc(db, `users/${uid}/syllabus/${s.subjectId}`));
+      return [s.subjectId, userSyll.exists() ? (userSyll.data() as ChaptersMap) : {}] as const;
+    }),
+  );
+  const chapters: Record<string, ChaptersMap> = Object.fromEntries(chaptersEntries);
   return { subjects, chapters };
 }

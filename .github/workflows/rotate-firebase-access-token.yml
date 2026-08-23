@@ -19,6 +19,9 @@ on:
     - cron: '0,50 * * * *'
   workflow_dispatch:
 
+# Least privilege — nothing here needs any default token scope.
+permissions: {}
+
 jobs:
   rotate:
     runs-on: ubuntu-latest
@@ -49,26 +52,34 @@ jobs:
         # mint-firebase-token.mjs reads the SA JSON from argv[2] or the
         # default path; the step before this wrote it to ~/.config/hsc-tracker/sa.json
         # (Linux home on the GitHub runner, not the Windows default in the script).
+        #
+        # The token is written to a temp file instead of $GITHUB_ENV — env
+        # values are not auto-masked, so any later `echo` could leak it into
+        # logs. The add-mask line is defense in depth for this job's output.
         run: |
           TOKEN=$(node src/mint-firebase-token.mjs ~/.config/hsc-tracker/sa.json | grep '^TOKEN:' | sed 's/^TOKEN://')
           if [ -z "$TOKEN" ]; then
             echo "ERROR: failed to mint token"
             exit 1
           fi
+          echo "::add-mask::${TOKEN}"
           echo "TOKEN_LEN=${#TOKEN}"
-          echo "TOKEN=${TOKEN}" >> "$GITHUB_ENV"
+          umask 077
+          printf '%s' "$TOKEN" > "$RUNNER_TEMP/fb_token.txt"
           echo "expires_at=$(date -u -d '+55 minutes' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
       - name: Push token to Cloudflare Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          TOKEN: ${{ env.TOKEN }}
         working-directory: apps/workers
         run: |
+          npm ci --no-audit --no-fund
           # wrangler reads CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID from env.
-          # Pipe the token into `wrangler secret put` non-interactively.
-          echo "$TOKEN" | npx wrangler secret put FIREBASE_ACCESS_TOKEN
+          # Pipe the token into `wrangler secret put` non-interactively; wrangler
+          # is pinned to the version in apps/workers devDependencies via npm ci.
+          wrangler secret put FIREBASE_ACCESS_TOKEN < "$RUNNER_TEMP/fb_token.txt"
+          rm -f "$RUNNER_TEMP/fb_token.txt"
 
       - name: Verify secret was updated
         working-directory: apps/workers

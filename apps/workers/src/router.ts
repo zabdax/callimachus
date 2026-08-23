@@ -5,21 +5,46 @@ import { processStudySession } from './handlers/processStudySession.js';
 import { sessionStart } from './handlers/sessionStart.js';
 import { approvePayment } from './handlers/approvePayment.js';
 import { requireUid, WorkerError } from './db.js';
-import { makeRestAdapter } from './firebase-admin.js';
+import { makeRestAdapter, makeAuditLogger } from './firebase-admin.js';
+
+/**
+ * Origin allowlist built from ALLOWED_ORIGINS. Plain entries match
+ * exactly; entries starting with `*.` or `*-` match any host ending with
+ * the rest (so `*-team.vercel.app` covers every preview deployment of a
+ * Vercel project, which each get a unique subdomain).
+ */
+function buildOriginMatcher(raw: string): (origin: string) => boolean {
+  const rules = (raw || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) =>
+      entry.startsWith('*.') || entry.startsWith('*-')
+        ? { suffix: entry.slice(1) }
+        : { exact: entry },
+    );
+  return (origin) =>
+    rules.some((rule) =>
+      'exact' in rule
+        ? rule.exact === origin
+        : origin.endsWith(rule.suffix) && origin.length > rule.suffix.length,
+    );
+}
 
 export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   const app = new Hono<{ Variables: AuthVariables }>();
   const db = makeRestAdapter({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
-  const allowedOrigins = new Set((env.ALLOWED_ORIGINS || env.WORKERS_BASE).split(',').map((origin) => origin.trim()).filter(Boolean));
+  const audit = makeAuditLogger({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
+  const originAllowed = buildOriginMatcher(env.ALLOWED_ORIGINS || env.WORKERS_BASE);
 
   app.use('*', async (c, next) => {
     const origin = c.req.header('origin');
     if (c.req.method === 'OPTIONS') {
-      if (!origin || !allowedOrigins.has(origin)) return c.text('Forbidden', 403);
+      if (!origin || !originAllowed(origin)) return c.text('Forbidden', 403);
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
     await next();
-    if (origin && allowedOrigins.has(origin)) {
+    if (origin && originAllowed(origin)) {
       const headers = corsHeaders(origin);
       Object.entries(headers).forEach(([key, value]) => c.res.headers.set(key, value));
     }
@@ -54,7 +79,7 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
       const body = await readBody<{ paymentRequestId?: unknown }>(c);
       if (typeof body.paymentRequestId !== 'string') throw new WorkerError('invalid-argument', 'paymentRequestId required');
       const adminUid = requireUid(c.get('claims'));
-      return c.json({ data: await approvePayment(adminUid, { paymentRequestId: body.paymentRequestId }, db, { isAdmin: (uid) => db.adminExists(uid) }, { log: async () => undefined }) });
+      return c.json({ data: await approvePayment(adminUid, { paymentRequestId: body.paymentRequestId }, db, { isAdmin: (uid) => db.adminExists(uid) }, audit) });
     } catch (error) { return workerErrorResponse(c, error); }
   });
 

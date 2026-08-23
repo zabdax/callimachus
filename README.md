@@ -54,11 +54,13 @@ Run browser tests after installing Playwright’s browser:
 
 ## Deployment
 
-The deployment script builds the web and Worker apps, deploys Cloudflare Pages/Workers, then deploys Firestore rules and indexes:
+The default pipeline builds the web and Worker apps, deploys Cloudflare Pages/Workers, then deploys Firestore rules and indexes:
 
 ```bash
 node scripts/deploy.mjs
 ```
+
+To host the static web app on Vercel instead (Worker + Firestore unchanged), see [docs/DEPLOY-VERCEL.md](./docs/DEPLOY-VERCEL.md) — the repo ships `apps/web/vercel.json` with SPA rewrites, Node engine, and service-worker cache headers.
 
 It requires Cloudflare and Firebase credentials plus the public Vite/Firebase configuration as environment variables. Do not commit credentials, real `.env.production` files, service accounts, or access tokens.
 

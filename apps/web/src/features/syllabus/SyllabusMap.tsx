@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useSyllabus } from './useSyllabus';
@@ -10,14 +11,21 @@ export function SyllabusMap({ medium }: { medium: 'bangla' | 'english' }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const uid = user?.uid ?? '';
+  const [saveError, setSaveError] = useState(false);
   const { subjects = [], chapters = {}, loading, error, toggle } = useSyllabus(uid, medium);
   if (!uid) return null;
   if (loading) return <p className="p-4 text-text-dim" role="status">{t('common.loading')}</p>;
   if (error) return <p className="p-4 text-danger" role="alert">Could not load your syllabus. Please refresh and try again.</p>;
   if (subjects.length === 0) return <p className="p-4 text-text-dim">No syllabus has been added for this batch yet.</p>;
 
+  const onToggle = (args: { subjectId: string; chapterId: string; stage: Stage }) => {
+    setSaveError(false);
+    toggle(args).catch(() => setSaveError(true));
+  };
+
   return (
     <section className="space-y-6 p-4 text-text">
+      {saveError && <p role="alert" className="rounded-md bg-danger/10 p-3 text-sm text-danger">Your last change may not have saved — check your connection and try again.</p>}
       {subjects.map((s) => {
         const cm = chapters[s.subjectId] ?? {};
         const pct = subjectCompletion(cm);
@@ -51,7 +59,7 @@ export function SyllabusMap({ medium }: { medium: 'bangla' | 'english' }) {
                             checked={!!ch[stage]}
                             aria-label={`${c.name}: ${t(`syllabus.${stage}`)}`}
                             onChange={() =>
-                              void toggle({ subjectId: s.subjectId, chapterId: c.id, stage })
+                              onToggle({ subjectId: s.subjectId, chapterId: c.id, stage })
                             }
                           />
                           <span>{t(`syllabus.${stage}`)}</span>

@@ -15,20 +15,32 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
-    requireWorkerConfig(env);
-    const date = new Date(controller.scheduledTime);
-    const minute = date.getUTCMinutes();
-    const hour = date.getUTCHours();
-    const schedule = minute === 0 && hour !== 0
-      ? 'LEADERBOARD_ROLLUP'
-      : hour === 0 && minute === 0
-        ? 'BATCH_STATUS'
-        : hour === 23 && minute === 0
-          ? 'DAILY_PLAN'
-          : minute === 30
-            ? 'NONCE_AND_REMINDER'
-            : 'UNKNOWN';
-    await cronTick(schedule, makeCronAdapters({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN }));
+    try {
+      requireWorkerConfig(env);
+      const date = new Date(controller.scheduledTime);
+      const minute = date.getUTCMinutes();
+      const hour = date.getUTCHours();
+      const schedule = minute === 0 && hour !== 0
+        ? 'LEADERBOARD_ROLLUP'
+        : hour === 0 && minute === 0
+          ? 'BATCH_STATUS'
+          : hour === 23 && minute === 0
+            ? 'DAILY_PLAN'
+            : minute === 30
+              ? 'NONCE_AND_REMINDER'
+              : 'UNKNOWN';
+      if (schedule === 'UNKNOWN') {
+        // Schedule drift or a new trigger missing from wrangler.toml — make
+        // it visible in logs instead of silently no-oping.
+        console.error(`unmapped cron trigger: ${controller.cron}`);
+        return;
+      }
+      await cronTick(schedule, makeCronAdapters({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN }));
+    } catch (error) {
+      // A thrown cron would surface as an unhandled rejection and silently
+      // skip; log so failures are observable in Workers logs.
+      console.error('cron tick failed', error);
+    }
   },
 };
 

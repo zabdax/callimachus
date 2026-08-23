@@ -69,15 +69,17 @@ function localMidnightMs(dateKey: string, tz: string): number {
   let lo = Date.UTC(y, m - 1, d, 0, 0, 0) - 14 * 3600_000;
   let hi = lo + 28 * 3600_000;
   // Bisect: find the UTC ms whose local-date-key in tz equals dateKey.
+  // Second precision — minute rounding could place "midnight" up to 59s
+  // late, spilling midnight-crossing segments into the wrong date.
   for (let i = 0; i < 32; i++) {
-    const mid = Math.floor((lo + hi) / 2 / 60_000) * 60_000;
+    const mid = Math.floor((lo + hi) / 2 / 1000) * 1000;
     const k = localDateKey(mid, tz);
     if (k === dateKey) {
       // Refine: find the lowest ms with this key.
       let left = lo;
       let right = mid;
       for (let j = 0; j < 16; j++) {
-        const m2 = Math.floor((left + right) / 2 / 60_000) * 60_000;
+        const m2 = Math.floor((left + right) / 2 / 1000) * 1000;
         if (localDateKey(m2, tz) === dateKey) right = m2;
         else left = m2;
       }

@@ -1,5 +1,6 @@
 import { getAuth } from 'firebase/auth';
 import { app as firebaseApp } from '@/lib/firebase/client';
+import { getAppCheckToken } from '@/lib/firebase/appCheck';
 
 /**
  * Thin wrapper that mirrors Firebase `httpsCallable` semantics against
@@ -34,18 +35,22 @@ async function fetchIdToken(): Promise<string | null> {
   return u.getIdToken();
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 export async function callWorker<TReq, TRes>(
   name: string,
   req: TReq,
 ): Promise<{ data: TRes }> {
-  const idToken = await fetchIdToken();
+  const [idToken, appCheckToken] = await Promise.all([fetchIdToken(), getAppCheckToken()]);
   const res = await fetch(`${WORKERS_BASE}/api/${name}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      ...(appCheckToken ? { 'X-Firebase-AppCheck': appCheckToken } : {}),
     },
     body: JSON.stringify({ data: req }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   const body = (await res.json().catch(() => ({}))) as {

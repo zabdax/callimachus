@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTimer } from './useTimer';
 import { stopAndSubmit } from './stopAndSubmit';
 import { Button } from '@/components/ui/Button';
@@ -15,13 +15,12 @@ export function TimerUI({ uid }: { uid: string }) {
   const timer = useTimer({ uid });
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { (window as { __hscUid?: string }).__hscUid = uid; }, [uid]);
   const stop = async () => {
     if (!timer.record || timer.status === 'idle') return;
     setBusy(true); setNotice(null);
     try {
       if (!timer.record.sessionId) throw new Error('This session needs to restart before it can be saved.');
-      const result = await stopAndSubmit({ id: crypto.randomUUID(), uid, sessionId: timer.record.sessionId, clientStartTs: timer.record.startTs, clientEndedTs: Date.now(), serverStartTs: timer.record.serverStartTs, chapterId: null });
+      const result = await stopAndSubmit({ id: crypto.randomUUID(), uid, sessionId: timer.record.sessionId, clientStartTs: timer.record.startTs, clientEndedTs: Date.now(), pausedAccumMs: timer.record.pausedAccumMs, serverStartTs: timer.record.serverStartTs, chapterId: null });
       timer.reset();
       setNotice('queued' in result && result.queued ? 'Saved offline. It will submit when you reconnect.' : 'Study session saved.');
     } catch (error) { setNotice((error as Error).message || 'Could not save this session.'); }
@@ -43,6 +42,7 @@ export function TimerUI({ uid }: { uid: string }) {
         {timer.status === 'paused' && <Button onClick={timer.resume}>Resume</Button>}
         {timer.status !== 'idle' && <Button variant="danger" onClick={() => void stop()} disabled={busy}>{busy ? 'Saving…' : 'Finish & save'}</Button>}
       </div>
+      {timer.startError && <p role="alert" className="max-w-sm text-center text-sm text-danger">Could not reach the server, so this session can’t be saved. Restart the session when your connection is back.</p>}
       {notice && <p role="status" className="rounded-md bg-surface-2 px-3 py-2 text-sm">{notice}</p>}
     </main>
   );

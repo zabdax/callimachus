@@ -49,6 +49,18 @@ export function ApprovalQueue() {
   );
 
   if (items === null) {
+    if (error) {
+      return (
+        <div className="p-4">
+          <div role="alert" className="mb-3 rounded-md bg-danger/10 text-danger p-3 text-sm">
+            {error}
+          </div>
+          <button type="button" onClick={() => void refresh()} className="rounded-md bg-primary text-white px-3 py-1 text-xs font-medium">
+            Retry
+          </button>
+        </div>
+      );
+    }
     return <p className="p-4 text-sm text-text-dim" role="status">Loading…</p>;
   }
 

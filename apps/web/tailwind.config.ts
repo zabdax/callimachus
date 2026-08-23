@@ -18,8 +18,8 @@ export default {
         danger: 'var(--danger)',
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-        display: ['"Space Grotesk"', '"Plus Jakarta Sans"', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans Variable"', '"Plus Jakarta Sans"', '"Hind Siliguri"', 'system-ui', 'sans-serif'],
+        display: ['"Space Grotesk Variable"', '"Space Grotesk"', '"Hind Siliguri"', 'sans-serif'],
         bn: ['"Hind Siliguri"', '"Noto Sans Bengali"', 'sans-serif'],
       },
     },

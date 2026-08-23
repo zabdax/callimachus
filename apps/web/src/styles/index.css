@@ -1,3 +1,12 @@
+/* Self-hosted variable fonts (spec §6.1): latin + bengali subsets are
+   unicode-range split by fontsource, so only used glyphs download. */
+@import '@fontsource-variable/space-grotesk';
+@import '@fontsource-variable/plus-jakarta-sans';
+@import '@fontsource/hind-siliguri/400.css';
+@import '@fontsource/hind-siliguri/500.css';
+@import '@fontsource/hind-siliguri/600.css';
+@import '@fontsource/hind-siliguri/700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

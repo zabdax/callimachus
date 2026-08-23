@@ -1,5 +1,8 @@
 import type { BatchState } from './handlers/batchStatus';
 import { recomputeBatchStatus } from './handlers/batchStatus';
+import { localDateKey } from './time/bst';
+
+const TZ = 'Asia/Dhaka';
 
 /**
  * All cron handlers share a single entry point so we use only 1 of the
@@ -19,10 +22,14 @@ export interface CronAdapters {
   listBatches: () => Promise<Array<{ id: string; collegeStart: number; examStart: number; examEnd: number }>>;
   /** Writes the computed status back to /batches/{id}. */
   writeBatchStatus: (id: string, state: BatchState) => Promise<void>;
-  /** Lists today's sessions across all users (for leaderboard rollup). */
+  /** Lists today's per-user leaderboard docs (for daily aggregates). */
   listTodaySessions: (date: string) => Promise<Array<{ uid: string; durationSec: number }>>;
-  /** Writes the rolled-up leaderboard monthly doc. */
-  writeMonthlyLeaderboard: (monthKey: string, totalDurationSec: number, activeUsers: number) => Promise<void>;
+  /** Lists month-to-date per-user leaderboard docs. */
+  listMonthSessions: (monthKey: string) => Promise<Array<{ uid: string; durationSec: number }>>;
+  /** Writes aggregate fields onto the daily leaderboard doc. */
+  writeDailyLeaderboardAggregate: (date: string, activeUsers: number) => Promise<void>;
+  /** Writes reconciled aggregate fields onto the monthly leaderboard doc. */
+  writeMonthlyLeaderboardAggregate: (monthKey: string, totalDurationSec: number, activeUsers: number) => Promise<void>;
   /** Per-user presence nonces — emits a fresh nonce for each active session. */
   listActiveSessions: () => Promise<Array<{ uid: string }>>;
   /** Writes the nonce to KV (or any cache). */
@@ -35,7 +42,7 @@ export interface CronAdapters {
   listFcmTokens: (uid: string) => Promise<string[]>;
   /** Lists pending upcomingTasks for daily plan generation. */
   listPendingTasksForDailyPlan: (uid: string, now: number) => Promise<Array<{ id: string; subjectId: string; scheduledFor: number }>>;
-  /** Writes the daily plan to /users/{uid}/meta/dailyPlan. */
+  /** Writes the daily plan to /users/{uid}/dailyPlan/{date}. */
   writeDailyPlan: (uid: string, blocks: Array<{ id: string; subjectId: string; scheduledFor: number }>) => Promise<void>;
   /** Lists all uids with profiles. */
   listAllUids: () => Promise<string[]>;
@@ -82,12 +89,18 @@ async function runBatchStatus(adapters: CronAdapters, now: number): Promise<void
 }
 
 async function runLeaderboardRollup(adapters: CronAdapters, now: number): Promise<void> {
-  const dateKey = new Date(now).toISOString().slice(0, 10);
+  // Sessions are bucketed under Asia/Dhaka dates, so the rollup must use
+  // the BST date key — a UTC date between 18:00–23:59 UTC is still the
+  // previous BST day and would read the wrong doc.
+  const dateKey = localDateKey(now, TZ);
   const monthKey = dateKey.slice(0, 7);
   const today = await adapters.listTodaySessions(dateKey);
-  const total = today.reduce((acc, s) => acc + s.durationSec, 0);
-  const uniqueUsers = new Set(today.map((s) => s.uid)).size;
-  await adapters.writeMonthlyLeaderboard(monthKey, total, uniqueUsers);
+  await adapters.writeDailyLeaderboardAggregate(dateKey, new Set(today.map((s) => s.uid)).size);
+  // Monthly totals are maintained incrementally per session; the rollup
+  // reconciles the aggregate doc from the per-user docs (idempotent).
+  const month = await adapters.listMonthSessions(monthKey);
+  const total = month.reduce((acc, s) => acc + s.durationSec, 0);
+  await adapters.writeMonthlyLeaderboardAggregate(monthKey, total, month.length);
 }
 
 async function runNonceIssuance(adapters: CronAdapters, now: number): Promise<void> {

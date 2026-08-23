@@ -10,7 +10,8 @@ export function pacePct(b: BatchDates, now: Date): number {
 export function remainingDays(b: BatchDates, now: Date): number {
   const diff = b.examStart.getTime() - now.getTime();
   if (diff <= 0) return 0;
-  return Math.ceil(diff / 86_400_000);
+  // Floor, not ceil: an exam 1 hour away is "0 days", not "1 day".
+  return Math.floor(diff / 86_400_000);
 }
 
 export function forecastFinishDate(

@@ -22,13 +22,37 @@ export async function approvePayment(
   if (!(await admins.isAdmin(adminUid))) throw new WorkerError('permission-denied', 'Admin role required.');
   const pr = await db.getPaymentRequest(input.paymentRequestId);
   if (!pr) throw new WorkerError('not-found', 'paymentRequest not found.');
-  if (pr.status !== 'pending') throw new WorkerError('failed-precondition', 'payment request is no longer pending');
   const months = PLAN_MONTHS[pr.planId];
   if (!months) throw new WorkerError('invalid-argument', 'unsupported subscription plan');
   const approvedAt = now();
-  const expiresAt = approvedAt + months * 30 * 86_400_000;
+
+  if (pr.status === 'pending') {
+    // Flip status FIRST, guarded by updateTime (compare-and-set). Two
+    // concurrent approvals race here and exactly one wins — writing the
+    // subscription first would let both through.
+    try {
+      await db.markPaymentRequestApproved(input.paymentRequestId, adminUid, approvedAt, pr.updateTime);
+    } catch {
+      throw new WorkerError('failed-precondition', 'payment request is no longer pending');
+    }
+  } else if (pr.status === 'approved') {
+    // Idempotent retry / recovery path: if a previous approval flipped the
+    // status but crashed before writing the subscription, re-apply it.
+    const existing = await db.getUserSubscription(pr.uid);
+    if (existing?.status === 'active' && existing.paymentRequestId === input.paymentRequestId) {
+      return { ok: true };
+    }
+  } else {
+    throw new WorkerError('failed-precondition', 'payment request is no longer pending');
+  }
+
+  // Renewals stack on top of an unexpired subscription instead of
+  // overwriting it (approving a renewal early would otherwise shrink
+  // entitlement).
+  const current = await db.getUserSubscription(pr.uid);
+  const baseMs = current?.status === 'active' && current.expiresAt > approvedAt ? current.expiresAt : approvedAt;
+  const expiresAt = baseMs + months * 30 * 86_400_000;
   await db.setUserSubscription(pr.uid, { status: 'active', plan: pr.planId, expiresAt, paymentRequestId: input.paymentRequestId });
-  await db.markPaymentRequestApproved(input.paymentRequestId, adminUid, approvedAt, pr.updateTime);
   await audit.log({ actor: adminUid, action: 'approve_payment', target: input.paymentRequestId, after: { uid: pr.uid, plan: pr.planId, expiresAt }, at: approvedAt });
   return { ok: true };
 }

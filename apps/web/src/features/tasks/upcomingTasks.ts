@@ -5,6 +5,7 @@ import {
   doc,
   getDocs,
   getFirestore,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -54,7 +55,11 @@ export function normalizeTask(raw: Raw): UpcomingTask {
 
 export async function listUpcomingTasks(uid: string): Promise<UpcomingTask[]> {
   const db = getFirestore(app);
-  const q = query(collection(db, `users/${uid}/upcomingTasks`), where('status', '==', 'pending'));
+  const q = query(
+    collection(db, `users/${uid}/upcomingTasks`),
+    where('status', '==', 'pending'),
+    orderBy('scheduledFor', 'asc'),
+  );
   const snap = await getDocs(q);
   return snap.docs.map((d) =>
     normalizeTask({ id: d.id, uid, ...(d.data() as Omit<Raw, 'id' | 'uid'>) }),
