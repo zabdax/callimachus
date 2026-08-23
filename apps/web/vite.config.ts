@@ -39,6 +39,12 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/__\/auth\//],
           // Do not runtime-cache private Firestore responses; stale private data must not survive sign-out.
           runtimeCaching: [],
+          // Default glob is js/css/html only — fonts would always hit the
+          // network, so a blocked/flaky host (e.g. *.vercel.app from some
+          // ISPs) leaves the UI falling back to system fonts and spams
+          // ERR_CONNECTION_TIMED_OUT. ~500KB of woff2 keeps en+bn rendering
+          // fully offline.
+          globPatterns: ['**/*.{js,css,html,woff2}'],
         },
       }),
     ],
