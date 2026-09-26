@@ -23,7 +23,11 @@ export function OnboardingForm({ uid, onDone }: { uid: string; onDone: (value: F
     try {
       // Never write displayName here: re-submitting onboarding would clobber
       // the Google profile name already stored on users/{uid}.
-      await setDoc(doc(getFirestore(app), 'users', uid), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+      // Also never write createdAt on merge: firestore.rules validProfileUpdate
+      // only allows changed keys in [displayName,email,photoURL,college,batchId,
+      // medium,timezone,updatedAt] — including createdAt on a re-submit fails
+      // with permission-denied and leaves the user stuck on onboarding.
+      await setDoc(doc(getFirestore(app), 'users', uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
       onDone(data);
     } catch (error) { setSubmitError((error as Error).message || 'We could not save your profile. Please try again.'); }
   });

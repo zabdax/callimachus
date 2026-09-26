@@ -51,6 +51,24 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   });
 
   app.get('/api/echo', (c) => c.json({ ok: true, service: 'callimachus-workers', ts: Date.now() }));
+  // Unauthenticated health check for diagnosing FIREBASE_ACCESS_TOKEN /
+  // config issues without leaking the secret. Reports presence + token
+  // prefix only (ya29... expected; AIza... means wrong credential type).
+  app.get('/api/health', (c) => {
+    const token = env.FIREBASE_ACCESS_TOKEN ?? '';
+    return c.json({
+      ok: true,
+      service: 'callimachus-workers',
+      ts: Date.now(),
+      config: {
+        hasProjectId: Boolean(env.FIREBASE_PROJECT_ID),
+        projectId: env.FIREBASE_PROJECT_ID ?? '',
+        hasAccessToken: Boolean(token),
+        tokenPrefix: token.slice(0, 4),
+        tokenLength: token.length,
+      },
+    });
+  });
   app.get('/api/private/me', requireAuth(env.FIREBASE_PROJECT_ID), (c) => c.json({ ok: true, uid: c.get('uid'), admin: !!c.get('claims')?.admin }));
 
   app.post('/api/sessionStart', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
@@ -87,7 +105,7 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   return app;
 }
 
-function corsHeaders(origin: string): Record<string, string> { return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }; }
+function corsHeaders(origin: string): Record<string, string> { return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type,X-Firebase-AppCheck', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }; }
 async function readBody<T>(c: { req: { json: () => Promise<unknown> } }): Promise<T> { const body = await c.req.json().catch(() => null); if (!body || typeof body !== 'object' || Array.isArray(body)) throw new WorkerError('invalid-argument', 'invalid JSON body'); const value = (body as { data?: unknown }).data ?? body; if (!value || typeof value !== 'object' || Array.isArray(value)) throw new WorkerError('invalid-argument', 'invalid request data'); return value as T; }
 function workerErrorResponse(c: { json: (body: unknown, status?: number) => Response }, error: unknown): Response { if (error instanceof WorkerError) { const out = error.toResponse(); return c.json(out.body, out.status); } console.error('worker request failed', error); return c.json({ ok: false, error: 'internal', message: 'Request could not be completed' }, 500); }
 

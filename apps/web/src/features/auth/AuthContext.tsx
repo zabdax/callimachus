@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { app } from '@/lib/firebase/client';
+import { app, firebaseConfigError } from '@/lib/firebase/client';
 import { registerOfflineReplay } from '@/features/timer/stopAndSubmit';
 
 type AuthState = {
@@ -34,6 +34,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   userRef.current = user;
 
   useEffect(() => {
+    // Explicit local persistence: without this, private-mode / blocked
+    // third-party storage drops the session on the redirect bounce-back and
+    // Google sign-in loops sign-in → Google → sign-in forever.
+    // Dynamic import (like getRedirectResult below) so unit tests that mock
+    // firebase/auth without setPersistence don't throw on static access.
+    import('firebase/auth').then(async ({ setPersistence, browserLocalPersistence }) => {
+      if (typeof setPersistence !== 'function') return;
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (e) {
+        console.error('Auth persistence error (private mode / blocked storage?):', e);
+      }
+    }).catch(() => undefined);
     // Capture redirect result once on mount: Firebase auto-handles the
     // signInWithRedirect return. We surface errors via getRedirectResult
     // so failures (e.g. "Google provider not enabled", "domain not
@@ -46,6 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(e instanceof Error ? e : new Error(String(e)));
       }
     });
+    if (firebaseConfigError) {
+      console.error('Firebase config error:', firebaseConfigError);
+      setAuthError(firebaseConfigError);
+    }
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
