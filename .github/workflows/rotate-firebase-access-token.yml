@@ -108,7 +108,8 @@ jobs:
           # wrangler reads CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID from env.
           # Pipe the token into `wrangler secret put` non-interactively; wrangler
           # is pinned to the version in apps/workers devDependencies via npm ci.
-          wrangler secret put FIREBASE_ACCESS_TOKEN < "$RUNNER_TEMP/fb_token.txt"
+          # npx is required: node_modules/.bin is not on PATH in Actions.
+          npx wrangler secret put FIREBASE_ACCESS_TOKEN < "$RUNNER_TEMP/fb_token.txt"
           rm -f "$RUNNER_TEMP/fb_token.txt"
 
       - name: Verify secret was updated
