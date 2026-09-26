@@ -41,6 +41,8 @@ function errorKey(e: unknown): string {
     case 'auth/popup-blocked':
     case 'auth/cancelled-popup-request':
       return 'auth.error.popupBlocked';
+    case 'auth/storage-blocked':
+      return 'auth.error.storageBlocked';
     default:
       return 'auth.error.default';
   }
