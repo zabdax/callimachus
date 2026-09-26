@@ -15,6 +15,12 @@ import './sign-in.css';
  */
 function errorKey(e: unknown): string {
   const code = (e as { code?: string } | null)?.code ?? '';
+  const message = (e as Error | null)?.message ?? '';
+  // Missing VITE_* build-time config surfaces as invalid-api-key or a
+  // generic config error from client.ts — point at the real fix.
+  if (code === 'auth/invalid-api-key' || /Missing Firebase config/.test(message)) {
+    return 'auth.error.invalidApiKey';
+  }
   switch (code) {
     case 'auth/unauthorized-domain':
       return 'auth.error.unauthorizedDomain';
@@ -28,6 +34,13 @@ function errorKey(e: unknown): string {
       return 'auth.error.badCredentials';
     case 'auth/too-many-requests':
       return 'auth.error.tooMany';
+    case 'auth/user-disabled':
+      return 'auth.error.userDisabled';
+    case 'auth/account-exists-with-different-credential':
+      return 'auth.error.accountExists';
+    case 'auth/popup-blocked':
+    case 'auth/cancelled-popup-request':
+      return 'auth.error.popupBlocked';
     default:
       return 'auth.error.default';
   }

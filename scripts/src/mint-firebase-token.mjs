@@ -4,7 +4,20 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 
 const saPath = process.argv[2] ?? 'C:/Users/MIT/.config/hsc-tracker/sa.json';
-const sa = JSON.parse(fs.readFileSync(saPath, 'utf8'));
+let sa;
+try {
+  sa = JSON.parse(fs.readFileSync(saPath, 'utf8'));
+} catch (e) {
+  console.error(`FAIL: cannot read service-account JSON at ${saPath}: ${(e).message}`);
+  console.error('Hint: pass the path explicitly — node scripts/src/mint-firebase-token.mjs ~/.config/hsc-tracker/sa.json');
+  process.exit(1);
+}
+for (const field of ['client_email', 'private_key']) {
+  if (!sa[field] || typeof sa[field] !== 'string') {
+    console.error(`FAIL: service-account JSON is missing ${field}. GCP_SA_JSON_BASE64 must be base64 of the full SA JSON file.`);
+    process.exit(1);
+  }
+}
 
 const now = Math.floor(Date.now() / 1000);
 const header = { alg: 'RS256', typ: 'JWT' };
@@ -26,12 +39,16 @@ const res = await fetch('https://oauth2.googleapis.com/token', {
   method: 'POST',
   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=' + jwt,
+}).catch((e) => {
+  console.error(`FAIL: network error reaching oauth2.googleapis.com: ${e.message}`);
+  process.exit(1);
 });
-const j = await res.json();
+const j = await res.json().catch(() => ({}));
 if (j.access_token) {
   console.log('TOKEN:' + j.access_token);
   console.error('expires in', j.expires_in, 'seconds');
 } else {
-  console.error('FAIL:', JSON.stringify(j));
+  console.error('FAIL: token endpoint did not return access_token:', JSON.stringify(j));
+  console.error('Hint: check SA client_email, key revocation, and datastore/cloud-platform scopes.');
   process.exit(1);
 }

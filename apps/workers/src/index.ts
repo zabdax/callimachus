@@ -9,8 +9,9 @@ export default {
       requireWorkerConfig(env);
       return createApp(env).fetch(request, env, ctx);
     } catch (error) {
+      const message = (error as Error)?.message ?? 'worker misconfigured';
       console.error('worker configuration error', error);
-      return Response.json({ ok: false, error: 'service_unavailable' }, { status: 503 });
+      return Response.json({ ok: false, error: 'service_unavailable', message }, { status: 503 });
     }
   },
 

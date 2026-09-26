@@ -24,10 +24,21 @@ function makeClient(creds: FirestoreCreds) {
   const base = `https://firestore.googleapis.com/v1/projects/${creds.projectId}/databases/(default)/documents`;
   const auth = { Authorization: `Bearer ${creds.accessToken}` };
 
+  function firestoreError(op: string, path: string, status: number): Error {
+    const tokenHint =
+      status === 401 || status === 403
+        ? ' — FIREBASE_ACCESS_TOKEN is likely expired, revoked, or has the wrong IAM scope/role. ' +
+          'Re-run the GitHub Actions `rotate-firebase-access-token` workflow (workflow_dispatch) and check ' +
+          'secrets GCP_SA_JSON_BASE64 / CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID. ' +
+          'The secret must be a GCP OAuth2 token (ya29....), NOT a Firebase Web API key (AIza...) or SA JSON.'
+        : '';
+    return new Error(`firestore ${op} ${path} ${status}${tokenHint}`);
+  }
+
   async function getDoc(path: string): Promise<FirestoreDocument | null> {
     const res = await fetch(`${base}/${path}`, { headers: auth });
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`firestore GET ${path} ${res.status}`);
+    if (!res.ok) throw firestoreError('GET', path, res.status);
     return res.json() as Promise<FirestoreDocument>;
   }
 
@@ -39,7 +50,7 @@ function makeClient(creds: FirestoreCreds) {
       const params = new URLSearchParams(query);
       if (pageToken) params.set('pageToken', pageToken);
       const res = await fetch(`${base}/${path}?${params}`, { headers: auth });
-      if (!res.ok) throw new Error(`firestore LIST ${path} ${res.status}`);
+      if (!res.ok) throw firestoreError('LIST', path, res.status);
       const data = await res.json() as { documents?: FirestoreDocument[]; nextPageToken?: string };
       out.push(...(data.documents ?? []));
       pageToken = data.nextPageToken;
@@ -55,7 +66,7 @@ function makeClient(creds: FirestoreCreds) {
       headers: { ...auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({ structuredQuery }),
     });
-    if (!res.ok) throw new Error(`firestore RUN_QUERY ${parentPath} ${res.status}`);
+    if (!res.ok) throw firestoreError('RUN_QUERY', parentPath, res.status);
     const rows = await res.json() as Array<{ document?: FirestoreDocument }>;
     return rows.flatMap((row) => (row.document ? [row.document] : []));
   }
@@ -66,7 +77,7 @@ function makeClient(creds: FirestoreCreds) {
       headers: { ...auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({ writes }),
     });
-    if (!res.ok) throw new Error(`firestore COMMIT ${res.status}`);
+    if (!res.ok) throw firestoreError('COMMIT', '', res.status);
   }
 
   const documentName = (path: string) => `${base}/${path}`;
