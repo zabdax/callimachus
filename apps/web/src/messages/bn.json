@@ -22,6 +22,7 @@
   "auth.error.userDisabled": "এই অ্যাকাউন্ট নিষ্ক্রিয় করা হয়েছে। সাপোর্টে যোগাযোগ করুন।",
   "auth.error.accountExists": "অন্য সাইন-ইন পদ্ধতিতে ইতিমধ্যে অ্যাকাউন্ট আছে। অন্য পদ্ধতিটি চেষ্টা করুন।",
   "auth.error.popupBlocked": "সাইন-ইন পপআপ ব্লক হয়েছে। পপআপ অনুমতি দিন বা Google redirect ব্যবহার করুন।",
+  "auth.error.storageBlocked": "আপনার ব্রাউজার সাইন-ইন স্টোরেজ ব্লক করেছে (Tracking Prevention)। এই সাইট ও apis.google.com-এর জন্য কুকি/সাইট ডেটা অনুমতি দিন, তারপর আবার চেষ্টা করুন।",
   "auth.error.default": "সাইন ইন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।",
   "onboarding.step1.title": "আপনার মাধ্যম কী?",
   "onboarding.step1.bangla": "বাংলা মাধ্যম",

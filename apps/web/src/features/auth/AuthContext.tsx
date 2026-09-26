@@ -45,8 +45,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await setPersistence(auth, browserLocalPersistence);
       } catch (e) {
         console.error('Auth persistence error (private mode / blocked storage?):', e);
+        // Surface it: otherwise the redirect just loops with no message.
+        setAuthError(
+          Object.assign(e instanceof Error ? e : new Error(String(e)), { code: 'auth/storage-blocked' }),
+        );
       }
     }).catch(() => undefined);
+    const storageError = storageBlockedError();
+    if (storageError) {
+      console.error('Auth storage blocked (tracking prevention?):', storageError);
+      setAuthError(storageError);
+    }
     // Capture redirect result once on mount: Firebase auto-handles the
     // signInWithRedirect return. We surface errors via getRedirectResult
     // so failures (e.g. "Google provider not enabled", "domain not
@@ -91,4 +100,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   return useContext(Ctx);
+}
+
+/**
+ * Probe first-party storage before Firebase Auth runs. Browsers with strict
+ * Tracking Prevention / blocked third-party cookies (Edge, Firefox, Safari)
+ * block the gapi iframe storage and drop the redirect session, so Google
+ * sign-in loops back to /sign-in with no error. Detect it here and surface
+ * an actionable message instead of a silent loop.
+ */
+function storageBlockedError(): Error | null {
+  try {
+    if (typeof navigator !== 'undefined' && 'cookieEnabled' in navigator && !navigator.cookieEnabled) {
+      return Object.assign(new Error('storage blocked: cookies disabled'), { code: 'auth/storage-blocked' });
+    }
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const k = '__hsc_storage_probe__';
+      window.localStorage.setItem(k, '1');
+      window.localStorage.removeItem(k);
+    }
+    return null;
+  } catch {
+    return Object.assign(new Error('storage blocked by tracking prevention'), { code: 'auth/storage-blocked' });
+  }
 }

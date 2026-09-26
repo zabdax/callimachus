@@ -22,6 +22,7 @@
   "auth.error.userDisabled": "This account is disabled. Contact support.",
   "auth.error.accountExists": "An account already exists with a different sign-in method. Try the other method.",
   "auth.error.popupBlocked": "Sign-in popup was blocked. Allow popups or use Google redirect.",
+  "auth.error.storageBlocked": "Your browser blocked sign-in storage (Tracking Prevention). Allow cookies and site data for this site plus apis.google.com, then try again. Edge: Settings -> Privacy -> Tracking prevention -> Exceptions. Chrome: Settings -> Privacy -> Third-party cookies -> Allow.",
   "auth.error.default": "Sign-in failed. Please try again.",
   "onboarding.step1.title": "What's your medium?",
   "onboarding.step1.bangla": "Bangla Medium",
