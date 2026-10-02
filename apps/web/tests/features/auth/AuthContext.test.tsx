@@ -1,21 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
-vi.mock('firebase/auth', () => ({
-  getAuth: () => ({}),
-  onAuthStateChanged: (_a: unknown, cb: (u: unknown) => void) => {
-    cb({ uid: 'u1', email: 'a@b.c', displayName: 'A' });
-    return () => {};
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({}) }));
+
+const getSessionMock = vi.fn();
+const onAuthStateChangeMock = vi.fn();
+
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: (...args: unknown[]) => getSessionMock(...args),
+      onAuthStateChange: (...args: unknown[]) => onAuthStateChangeMock(...args),
+    },
   },
-  GoogleAuthProvider: class {
-    addScope() {
-      return this;
-    }
-  },
-  signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: 'u1' } }),
-  signInWithRedirect: vi.fn().mockResolvedValue(undefined),
-  getRedirectResult: vi.fn().mockResolvedValue(null),
-  signOut: vi.fn(),
+  supabaseConfigError: null,
+  toAuthUser: (id: string | undefined, email?: string | null) =>
+    id ? { uid: id, email: email ?? null } : null,
 }));
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
@@ -27,6 +27,13 @@ function Probe() {
 
 describe('AuthContext', () => {
   it('exposes the current user', async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: 'u1', email: 'a@b.c' } } },
+      error: null,
+    });
+    onAuthStateChangeMock.mockReturnValue({
+      data: { subscription: { unsubscribe: () => {} } },
+    });
     render(
       <AuthProvider>
         <Probe />

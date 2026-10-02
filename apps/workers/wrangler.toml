@@ -21,7 +21,10 @@ enabled = true
 # === Vars (non-secret env) ===
 [vars]
 ENVIRONMENT = "production"
-FIREBASE_PROJECT_ID = "hsc-tracker-ef2b5"
+# Supabase project URL (public). The anon key is a client-side public value
+# (VITE_SUPABASE_ANON_KEY in the web app); the worker uses the service_role
+# key, which is static — no rotation cron.
+SUPABASE_URL = "https://xyzcompany.supabase.co"
 # Comma-separated browser origins allowed to call the API. Plain entries
 # match exactly; `*.`/`*-` entries match any host with that suffix —
 # `*-nevaxia.vercel.app` covers every preview deployment of the Vercel
@@ -48,11 +51,11 @@ crons = [
 ]
 
 # === Secrets (NOT committed) — set with `wrangler secret put NAME` ===
-#   FIREBASE_ACCESS_TOKEN  — pre-minted service-account access token
-#                            (rotated by external cron every ~60 min)
+#   SUPABASE_SERVICE_KEY  — Supabase service_role key (static, no rotation).
+#                           Supabase dashboard → Project Settings → API.
 #
-# Public Firebase config (NOT secret) is read by the client from
-# apps/web/.env.production — VITE_FIREBASE_* values.
+# Public Supabase config (NOT secret) is read by the client from
+# apps/web/.env.production — VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.
 
 # === Routes ===
 # Optional: bind to a custom domain (e.g. api.hsc-tracker.com).

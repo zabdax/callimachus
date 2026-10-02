@@ -1,6 +1,6 @@
 import { createApp } from './router.js';
 import { cronTick } from './crons.js';
-import { makeCronAdapters } from './firebase-admin.js';
+import { makeCronAdapters } from './supabase.js';
 import { requireWorkerConfig, type Env } from './env.js';
 
 export default {
@@ -36,7 +36,7 @@ export default {
         console.error(`unmapped cron trigger: ${controller.cron}`);
         return;
       }
-      await cronTick(schedule, makeCronAdapters({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN }));
+      await cronTick(schedule, makeCronAdapters({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_KEY }));
     } catch (error) {
       // A thrown cron would surface as an unhandled rejection and silently
       // skip; log so failures are observable in Workers logs.

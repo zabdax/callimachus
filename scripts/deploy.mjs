@@ -26,17 +26,13 @@ import { config as loadDotenv } from 'dotenv';
 /** Mirrors scripts/src/deploy-env.ts. Inlined because Node 20 cannot
  *  strip TS from a sibling .ts file at runtime without a bundler. */
 const REQUIRED = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID',
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
   'VITE_SENTRY_DSN',
   'VITE_SENTRY_ENVIRONMENT',
   'CLOUDFLARE_API_TOKEN',
   'CLOUDFLARE_ACCOUNT_ID',
-  'FIREBASE_TOKEN',
+  'SUPABASE_SERVICE_KEY',
 ];
 
 function findMissingEnv(env, required) {
@@ -104,15 +100,7 @@ if (wants('workers')) {
   run('npx --yes wrangler deploy --config apps/workers/wrangler.toml', '.');
 }
 
-if (wants('rules')) {
-  // Invoke the firebase CLI directly via the installed package in scripts/.
-  // 'firebase' is the bin name of the 'firebase-tools' npm package.
-  // Using 'node .../cli.js' avoids needing it on PATH or going through npx,
-  // which keeps the deploy reproducible and works regardless of cwd.
-  run('node scripts/node_modules/firebase-tools/lib/bin/cli.js deploy --only firestore:rules,firestore:indexes', '.');
-}
-
-console.log('✓ v2.0 deploy complete.');
+console.log('✓ v3.0 deploy complete (Supabase backend).');
 console.log('  Workers:  https://' + (process.env.WORKERS_BASE ?? 'hsc-tracker-ef2b5-workers.byzubooo.workers.dev'));
 console.log('  Pages:    https://hsc-tracker.pages.dev');
 console.log('  KV:       TRACKER_CACHE');

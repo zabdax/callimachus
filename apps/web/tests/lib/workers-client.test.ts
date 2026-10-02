@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const fetchMock = vi.fn();
-const getIdTokenMock = vi.fn().mockResolvedValue('id-token-xyz');
-const currentUserMock = { getIdToken: (...args: unknown[]) => getIdTokenMock(...args) };
+const getAccessTokenMock = vi.fn().mockResolvedValue('id-token-xyz');
 
-vi.mock('firebase/auth', () => ({
-  getAuth: () => ({ currentUser: currentUserMock }),
-}));
-
-vi.mock('@/lib/firebase/client', () => ({
-  app: { _app: true },
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+    },
+  },
+  getAccessToken: (...args: unknown[]) => getAccessTokenMock(...args),
 }));
 
 import { callWorker, callWorkerUnwrap, WorkerError } from '@/lib/workers/client';
@@ -17,6 +17,8 @@ import { callWorker, callWorkerUnwrap, WorkerError } from '@/lib/workers/client'
 describe('callWorker', () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    getAccessTokenMock.mockReset();
+    getAccessTokenMock.mockResolvedValue('id-token-xyz');
     (globalThis as unknown as { fetch: unknown }).fetch = fetchMock;
   });
 
@@ -45,6 +47,29 @@ describe('callWorker', () => {
       { clientStartTs: 0 },
     );
     expect(out.data).toEqual({ serverStartTs: 42 });
+  });
+
+  it('retries once with a refreshed token on 401', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'unauthenticated', message: 'expired' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { ok: true } }),
+      });
+    getAccessTokenMock
+      .mockResolvedValueOnce('stale-token')
+      .mockResolvedValueOnce('fresh-token');
+    const out = await callWorker('foo', {});
+    expect(out.data).toEqual({ ok: true });
+    const [, secondInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect((secondInit.headers as Record<string, string>).Authorization).toBe(
+      'Bearer fresh-token',
+    );
   });
 
   it('throws WorkerError on non-2xx', async () => {

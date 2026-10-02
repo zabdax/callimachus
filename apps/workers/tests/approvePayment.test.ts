@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { approvePayment } from '../src/handlers/approvePayment';
-import { StubFirestore, WorkerError, type PaymentRequest, type SubscriptionDoc } from '../src/db';
+import { StubDb, WorkerError, type PaymentRequest, type SubscriptionDoc } from '../src/db';
 
-class PaymentDb extends StubFirestore {
+class PaymentDb extends StubDb {
   request: PaymentRequest | null = { uid: 'u1', planId: '3m', status: 'pending', updateTime: 'ut-1' };
   subscription: SubscriptionDoc | null = null;
   events: string[] = [];
@@ -15,9 +15,9 @@ class PaymentDb extends StubFirestore {
     return Promise.resolve(this.subscription);
   }
   override markPaymentRequestApproved(_id: string, _by: string, _at: number, updateTime?: string): Promise<void> {
-    // Mimic Firestore's currentDocument.updateTime precondition.
+    // Mimic the compare-and-set updateTime precondition.
     const current = this.request;
-    if (!current || current.updateTime !== updateTime) return Promise.reject(new Error('firestore COMMIT 409'));
+    if (!current || current.updateTime !== updateTime) return Promise.reject(new Error('supabase PATCH 409'));
     this.request = { ...current, status: 'approved' };
     this.approvedWith.push(updateTime);
     this.events.push('flip');
@@ -32,7 +32,7 @@ class PaymentDb extends StubFirestore {
 
 class ConflictingDb extends PaymentDb {
   override markPaymentRequestApproved(): Promise<void> {
-    return Promise.reject(new Error('firestore COMMIT 409'));
+    return Promise.reject(new Error('supabase PATCH 409'));
   }
 }
 

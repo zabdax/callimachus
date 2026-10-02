@@ -1,7 +1,4 @@
-import {
-  addDoc, collection, doc, getDocs, getFirestore, query, serverTimestamp, updateDoc, where,
-} from 'firebase/firestore';
-import { app } from '@/lib/firebase/client';
+import { supabase } from '@/lib/supabase/client';
 
 export type TimeBlock = {
   id: string;
@@ -27,19 +24,64 @@ export function hasConflict(blocks: TimeBlock[], candidate: TimeBlock): boolean 
   });
 }
 
+type Row = {
+  id: string;
+  uid: string;
+  date: string;
+  start_hour: number;
+  duration_min: number;
+  subject_id: string;
+  chapter_id: string;
+  completed_at: string | null;
+  source: string;
+};
+
+const toBlock = (r: Row): TimeBlock => ({
+  id: r.id,
+  uid: r.uid,
+  date: r.date,
+  startHour: r.start_hour,
+  durationMin: r.duration_min,
+  subjectId: r.subject_id,
+  chapterId: r.chapter_id,
+  completedAt: r.completed_at ? new Date(r.completed_at) : null,
+  source: (r.source as TimeBlock['source']) ?? 'manual',
+});
+
 export async function listTimeBlocks(uid: string, date: string) {
-  const db = getFirestore(app);
-  const q = query(collection(db, `users/${uid}/timeBlocks`), where('date', '==', date));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, uid, ...(d.data() as Omit<TimeBlock, 'id' | 'uid'>) })) as TimeBlock[];
+  const { data, error } = await supabase
+    .from('time_blocks')
+    .select('*')
+    .eq('uid', uid)
+    .eq('date', date);
+  if (error) throw error;
+  return ((data ?? []) as unknown as Row[]).map(toBlock);
 }
 
 export async function addBlock(uid: string, b: Omit<TimeBlock, 'id' | 'uid' | 'completedAt'>) {
-  const db = getFirestore(app);
-  return addDoc(collection(db, `users/${uid}/timeBlocks`), { ...b, completedAt: null, createdAt: serverTimestamp() });
+  const { data, error } = await supabase
+    .from('time_blocks')
+    .insert({
+      uid,
+      date: b.date,
+      start_hour: b.startHour,
+      duration_min: b.durationMin,
+      subject_id: b.subjectId,
+      chapter_id: b.chapterId,
+      completed_at: null,
+      source: b.source,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data as { id: string };
 }
 
 export async function completeBlock(uid: string, id: string) {
-  const db = getFirestore(app);
-  await updateDoc(doc(db, `users/${uid}/timeBlocks/${id}`), { completedAt: serverTimestamp() });
+  const { error } = await supabase
+    .from('time_blocks')
+    .update({ completed_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('uid', uid);
+  if (error) throw error;
 }

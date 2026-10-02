@@ -1,10 +1,8 @@
-import { doc, getFirestore, setDoc, Timestamp } from 'firebase/firestore';
-import { app } from '@/lib/firebase/client';
+import { supabase } from '@/lib/supabase/client';
 
 export async function saveTrackedSubjects(uid: string, subjectIds: string[]) {
-  const db = getFirestore(app);
-  await setDoc(doc(db, `users/${uid}/meta/trackedSubjects`), {
-    subjectIds,
-    updatedAt: Timestamp.now(),
-  });
+  const { error } = await supabase
+    .from('tracked_subjects')
+    .upsert({ uid, subject_ids: subjectIds }, { onConflict: 'uid' });
+  if (error) throw error;
 }

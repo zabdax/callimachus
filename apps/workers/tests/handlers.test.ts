@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { sessionStart, assertDriftWithinTolerance } from '../src/handlers/sessionStart';
 import { processStudySession } from '../src/handlers/processStudySession';
-import { StubFirestore, WorkerError, type FirestoreAdapter } from '../src/db';
+import { StubDb, WorkerError, type DbAdapter } from '../src/db';
 
 // Replace 'stub' with a thin subclass that records writes for assertions.
-class RecordingDb extends StubFirestore {
+class RecordingDb extends StubDb {
   writes: { path: string; data: unknown }[] = [];
   count: Record<string, number> = {};
   lastEndedAt: number | null = null;
@@ -18,18 +18,18 @@ class RecordingDb extends StubFirestore {
     return Promise.resolve(this.count[date] ?? 0);
   }
   override writeSession(uid: string, id: string, doc: unknown): Promise<void> {
-    this.writes.push({ path: `users/${uid}/sessions/${id}`, data: doc });
+    this.writes.push({ path: `study_sessions/${uid}/${id}`, data: doc });
     return Promise.resolve();
   }
   override incrementDailyLeaderboard(date: string, dur: number, uid: string): Promise<void> {
     this.writes.push({
-      path: `analytics/leaderboard/daily/${date}/users/${uid}`,
+      path: `leaderboard_daily_users/${date}/${uid}`,
       data: { durationSec: dur },
     });
     return Promise.resolve();
   }
   override incrementChapterStat(uid: string, cid: string, dur: number): Promise<void> {
-    this.writes.push({ path: `users/${uid}/chapterStats/${cid}`, data: { totalSec: dur } });
+    this.writes.push({ path: `chapter_stats/${uid}/${cid}`, data: { totalSec: dur } });
     return Promise.resolve();
   }
   override setActiveSession(uid: string, sessionOrServerTs: { sessionId: string; serverStartTs: number; clientStartTs: number } | number, clientTs?: number): Promise<void> {
@@ -37,14 +37,14 @@ class RecordingDb extends StubFirestore {
       ? { sessionId: 'legacy', serverStartTs: sessionOrServerTs, clientStartTs: clientTs ?? 0 }
       : sessionOrServerTs;
     this.activeSession = data;
-    this.writes.push({ path: `users/${uid}/activeSession/current`, data });
+    this.writes.push({ path: `active_sessions/${uid}`, data });
     return Promise.resolve();
   }
   override getActiveSession(): Promise<{ sessionId: string; serverStartTs: number; clientStartTs: number } | null> {
     return Promise.resolve(this.activeSession);
   }
   override clearActiveSession(_uid: string, _sessionId: string, _updateTime?: string): Promise<void> {
-    if (this.failClear) return Promise.reject(new Error('firestore COMMIT 409'));
+    if (this.failClear) return Promise.reject(new Error('supabase DELETE 409'));
     return Promise.resolve();
   }
 }
@@ -61,7 +61,7 @@ describe('sessionStart', () => {
     expect(out.serverStartTs).toBe(1_700_000_000_000);
     expect(out.sessionId).toBeTypeOf('string');
     expect(db.writes).toHaveLength(1);
-    expect(db.writes[0]?.path).toBe('users/u1/activeSession/current');
+    expect(db.writes[0]?.path).toBe('active_sessions/u1');
   });
 });
 
@@ -99,9 +99,9 @@ describe('processStudySession', () => {
     expect(out.sessionIds.length).toBe(1);
     // 1 session write + 1 leaderboard doc
     const writes = db.writes.map((w) => w.path);
-    expect(writes.some((p) => p.startsWith('users/u1/sessions/'))).toBe(true);
-    expect(writes.some((p) => p.startsWith('analytics/leaderboard/daily/'))).toBe(true);
-    expect(writes.some((p) => p.startsWith('users/u1/chapterStats/'))).toBe(true);
+    expect(writes.some((p) => p.startsWith('study_sessions/u1/'))).toBe(true);
+    expect(writes.some((p) => p.startsWith('leaderboard_daily_users/'))).toBe(true);
+    expect(writes.some((p) => p.startsWith('chapter_stats/u1/'))).toBe(true);
   });
 
   it('rejects durations shorter than 10 seconds', async () => {
@@ -150,7 +150,7 @@ describe('processStudySession', () => {
       vi.setSystemTime(new Date(1_700_000_000_000 + 60_000)); // 1 min after start
       const bad = { ...validInput(), clientEndedTs: validInput().clientStartTs + 6 * 3600 * 1000 - 1000 };
       await processStudySession('u1', bad, db, 'ua');
-      const write = db.writes.find((w) => String(w.path).startsWith('users/u1/sessions/'));
+      const write = db.writes.find((w) => String(w.path).startsWith('study_sessions/u1/'));
       // ~6 min credited (1 min elapsed + 5 min tolerance), not ~6 hours.
       expect((write?.data as { durationSec: number }).durationSec).toBeLessThan(500);
     } finally {
@@ -161,14 +161,14 @@ describe('processStudySession', () => {
   it('deducts pausedAccumMs from the credited duration', async () => {
     const input = { ...validInput(), pausedAccumMs: 10 * 60_000 }; // 30 min wall, 10 min paused
     await processStudySession('u1', input, db, 'ua');
-    const write = db.writes.find((w) => String(w.path).startsWith('users/u1/sessions/'));
+    const write = db.writes.find((w) => String(w.path).startsWith('study_sessions/u1/'));
     expect((write?.data as { durationSec: number }).durationSec).toBe(20 * 60);
   });
 
   it('aborts without crediting when the active-session clear loses a race', async () => {
     db.failClear = true;
     await expect(processStudySession('u1', validInput(), db, 'ua')).rejects.toThrow();
-    expect(db.writes.some((w) => String(w.path).startsWith('users/u1/sessions/'))).toBe(false);
-    expect(db.writes.some((w) => String(w.path).startsWith('analytics/'))).toBe(false);
+    expect(db.writes.some((w) => String(w.path).startsWith('study_sessions/u1/'))).toBe(false);
+    expect(db.writes.some((w) => String(w.path).startsWith('leaderboard_'))).toBe(false);
   });
 });

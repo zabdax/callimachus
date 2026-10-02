@@ -1,17 +1,21 @@
-import { GoogleAuthProvider, getAuth, signInWithRedirect } from 'firebase/auth';
-import { app } from '@/lib/firebase/client';
+import { supabase } from '@/lib/supabase/client';
 
 /**
- * Sign in with Google via redirect (not popup).
+ * Sign in with Google via OAuth (PKCE).
  *
- * Popup is blocked in modern browsers when the sign-in origin differs
- * from the popup origin. Our app is on Cloudflare Pages (hsc-tracker.pages.dev)
- * but Firebase Auth redirects via firebaseapp.com — popup is blocked.
- * Redirect-based sign-in works regardless of origin.
+ * The browser leaves to Google and returns to our own /auth/callback route,
+ * which exchanges the code for a session in first-party storage — no
+ * cross-origin auth handler, so Tracking Prevention has nothing to block.
  */
 export async function signInWithGoogle() {
-  const provider = new GoogleAuthProvider();
-  provider.addScope('profile');
-  provider.addScope('email');
-  return signInWithRedirect(getAuth(app), provider);
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      ...(typeof window !== 'undefined'
+        ? { redirectTo: `${window.location.origin}/auth/callback` }
+        : {}),
+      queryParams: { access_type: 'offline', prompt: 'consent' },
+    },
+  });
+  if (error) throw error;
 }

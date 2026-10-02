@@ -32,12 +32,11 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          // Critical: Firebase Auth returns to /__/auth/handler?code=... after
-          // signInWithRedirect. If the SW serves the cached index.html for that
-          // navigation (default navigateFallback), Firebase never sees the auth
-          // code. The denylist below excludes those callbacks from the fallback.
+          // OAuth returns to our own /auth/callback route. Exclude any
+          // third-party auth callbacks from the SW fallback so the
+          // provider response is never swallowed by cached index.html.
           navigateFallbackDenylist: [/^\/__\/auth\//],
-          // Do not runtime-cache private Firestore responses; stale private data must not survive sign-out.
+          // Do not runtime-cache private API responses; stale private data must not survive sign-out.
           runtimeCaching: [],
           // Default glob is js/css/html only — fonts would always hit the
           // network, so a blocked/flaky host (e.g. *.vercel.app from some
@@ -52,7 +51,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+            supabase: ['@supabase/supabase-js'],
             charts: ['recharts'],
             three: ['three'],
           },
@@ -60,20 +59,12 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // Fall back to empty strings when VITE_FIREBASE_* is missing so the
-      // Firebase SDK throws a clear, actionable error at startup instead of
+      // Fall back to empty strings when VITE_SUPABASE_* is missing so the
+      // Supabase client logs a clear, actionable error at startup instead of
       // silently shipping broken config. Production must supply real values
       // via apps/web/.env.production or CI secrets.
-      'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(env('VITE_FIREBASE_API_KEY')),
-      'import.meta.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(env('VITE_FIREBASE_AUTH_DOMAIN')),
-      'import.meta.env.VITE_FIREBASE_PROJECT_ID': JSON.stringify(env('VITE_FIREBASE_PROJECT_ID')),
-      'import.meta.env.VITE_FIREBASE_STORAGE_BUCKET': JSON.stringify(
-        env('VITE_FIREBASE_STORAGE_BUCKET'),
-      ),
-      'import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(
-        env('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-      ),
-      'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(env('VITE_FIREBASE_APP_ID')),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env('VITE_SUPABASE_URL')),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env('VITE_SUPABASE_ANON_KEY')),
     },
     server: { port: 5173 },
     test: {

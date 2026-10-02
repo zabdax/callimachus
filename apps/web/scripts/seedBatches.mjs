@@ -1,28 +1,32 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, Timestamp } from 'firebase/firestore';
+// Seeds the batches table via Supabase PostgREST (service key bypasses RLS).
+// Usage:
+//   SUPABASE_URL=... SUPABASE_SERVICE_KEY=... npx tsx scripts/seedBatches.mjs
 import { BATCH_SEED } from '../src/features/batches/seedData.ts';
 
-const config = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY,
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-};
-
-const app = initializeApp(config);
-const db = getFirestore(app);
+const url = (process.env.SUPABASE_URL ?? '').replace(/\/$/, '');
+const serviceKey = process.env.SUPABASE_SERVICE_KEY ?? '';
+if (!url || !serviceKey) {
+  console.error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set');
+  process.exit(1);
+}
 
 for (const b of BATCH_SEED) {
-  await setDoc(doc(db, 'batches', b.id), {
-    label: b.label,
-    collegeStart: Timestamp.fromDate(b.collegeStart),
-    examStart: Timestamp.fromDate(b.examStart),
-    examEnd: Timestamp.fromDate(b.examEnd),
-    resultDate: Timestamp.fromDate(b.resultDate),
-    medium: b.medium,
-    isPublic: b.isPublic,
-    status: 'pre-start', // recomputeBatchStatus cron will fix
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
+  const res = await fetch(`${url}/rest/v1/batches?on_conflict=id`, {
+    method: 'POST',
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      id: b.id,
+      label: b.label,
+      college_start: b.collegeStart.toISOString(),
+      exam_start: b.examStart.toISOString(),
+      exam_end: b.examEnd.toISOString(),
+    }),
   });
-  console.log(`Seeded ${b.id}`);
+  if (!res.ok) throw new Error(`seed batches/${b.id} ${res.status} ${await res.text()}`);
+  console.log(`Seeded batches/${b.id}`);
 }

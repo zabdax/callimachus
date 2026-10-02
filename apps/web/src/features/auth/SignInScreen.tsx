@@ -1,51 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { getAuth } from 'firebase/auth';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { supabase } from '@/lib/supabase/client';
 import { signInWithGoogle } from './useGoogleSignIn';
 import { useAuth } from './AuthContext';
-import { app } from '@/lib/firebase/client';
 import { GoogleG, StarMark } from '@/features/landing/icons';
 import './sign-in.css';
 
 /**
- * Map Firebase auth error codes to friendly i18n keys. Raw messages like
- * "Firebase: error (auth/unauthorized-domain)" are meaningless to users.
+ * Map Supabase auth errors to friendly i18n keys. Raw messages like
+ * "Invalid login credentials" are kept internal; users see guidance.
  */
 function errorKey(e: unknown): string {
-  const code = (e as { code?: string } | null)?.code ?? '';
   const message = (e as Error | null)?.message ?? '';
-  // Missing VITE_* build-time config surfaces as invalid-api-key or a
-  // generic config error from client.ts — point at the real fix.
-  if (code === 'auth/invalid-api-key' || /Missing Firebase config/.test(message)) {
-    return 'auth.error.invalidApiKey';
-  }
-  switch (code) {
-    case 'auth/unauthorized-domain':
-      return 'auth.error.unauthorizedDomain';
-    case 'auth/operation-not-allowed':
-      return 'auth.error.operationNotAllowed';
-    case 'auth/network-request-failed':
-      return 'auth.error.network';
-    case 'auth/invalid-credential':
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-      return 'auth.error.badCredentials';
-    case 'auth/too-many-requests':
-      return 'auth.error.tooMany';
-    case 'auth/user-disabled':
-      return 'auth.error.userDisabled';
-    case 'auth/account-exists-with-different-credential':
-      return 'auth.error.accountExists';
-    case 'auth/popup-blocked':
-    case 'auth/cancelled-popup-request':
-      return 'auth.error.popupBlocked';
-    case 'auth/storage-blocked':
-      return 'auth.error.storageBlocked';
-    default:
-      return 'auth.error.default';
-  }
+  const code = (e as { code?: string } | null)?.code ?? '';
+  if (code === 'auth/storage-blocked') return 'auth.error.storageBlocked';
+  if (/Missing Supabase config/.test(message)) return 'auth.error.invalidApiKey';
+  if (/invalid login credentials/i.test(message)) return 'auth.error.badCredentials';
+  if (/email not confirmed/i.test(message)) return 'auth.error.unconfirmed';
+  if (/rate limit|too many requests|too_many/i.test(message)) return 'auth.error.tooMany';
+  if (/network|fetch|failed to fetch/i.test(message)) return 'auth.error.network';
+  return 'auth.error.default';
 }
 
 export function SignInScreen() {
@@ -61,12 +36,9 @@ export function SignInScreen() {
   // After auth, redirect to where the user came from (or / for fresh sign-in).
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/';
 
-  // Google sign-in completes as a full page reload back onto /sign-in —
-  // auth state arrives via onAuthStateChanged, not via the promise. Route
-  // the user onward from here; without this they land back on an
-  // identical-looking form and appear "stuck". The ref guards against a
-  // second hop: once navigated, `location.state` is gone, `from` becomes
-  // "/", and the effect would otherwise fire again and redirect to /.
+  // Google sign-in leaves to Google and returns via /auth/callback, which
+  // establishes the session and routes onward. If a session already exists
+  // here (e.g. second tab), route onward directly.
   const navigatedFor = useRef<string | null>(null);
   useEffect(() => {
     if (user && navigatedFor.current !== user.uid) {
@@ -81,10 +53,14 @@ export function SignInScreen() {
     setFormError(null);
     clearAuthError();
     try {
-      await signInWithEmailAndPassword(getAuth(app), email.trim(), password);
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw error;
       navigate(from, { replace: true });
-    } catch (e) {
-      setFormError(t(errorKey(e)));
+    } catch (err) {
+      setFormError(t(errorKey(err)));
     } finally {
       setBusy(false);
     }
@@ -95,9 +71,7 @@ export function SignInScreen() {
     setFormError(null);
     clearAuthError();
     try {
-      // signInWithRedirect resolves when the redirect BEGINS, not when it
-      // completes. The result is handled by the effect above after the
-      // bounce-back (and by AuthContext for errors).
+      // Redirects to Google; the session is established in /auth/callback.
       await signInWithGoogle();
     } catch (e) {
       setFormError(t(errorKey(e)));
@@ -105,8 +79,8 @@ export function SignInScreen() {
     }
   };
 
-  // A redirect failure (e.g. domain not authorized in Firebase) lands the
-  // user back here with authError set but nothing else changed — show it.
+  // An OAuth exchange failure (or storage/config problem) lands the user
+  // back here with authError set — show it instead of failing silently.
   const shownError = formError ?? (authError ? t(errorKey(authError)) : null);
 
   return (

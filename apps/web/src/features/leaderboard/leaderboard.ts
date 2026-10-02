@@ -1,5 +1,4 @@
-import { doc, getDoc, getFirestore } from 'firebase/firestore';
-import { app } from '@/lib/firebase/client';
+import { supabase } from '@/lib/supabase/client';
 
 export type LbUser = { uid: string; durationSec: number; name?: string; photoURL?: string; college?: string };
 
@@ -13,23 +12,35 @@ export function isRankUnlocked(todaySec: number): boolean {
 }
 
 /**
- * Reads the aggregate daily leaderboard doc written by the Workers cron.
- * Per-user docs under `.../users` are readable only by the owning user and
- * admins (privacy), so client-side top-N listing is not possible — a
- * future leaderboard UI should be served aggregates from the Worker.
+ * Reads the aggregate daily leaderboard row written by the Workers cron.
+ * Per-user rows are readable only by the owning user and admins (privacy),
+ * so client-side top-N listing is not possible — a future leaderboard UI
+ * should be served aggregates from the Worker.
  */
 export async function readDailyLeaderboard(date: string) {
-  const db = getFirestore(app);
-  const docSnap = await getDoc(doc(db, `analytics/leaderboard/daily/${date}`));
-  if (!docSnap.exists()) return { date, totalDurationSec: 0, activeUserCount: 0 };
-  const data = docSnap.data() as { totalDurationSec?: number; activeUserCount?: number };
-  return { date, totalDurationSec: data.totalDurationSec ?? 0, activeUserCount: data.activeUserCount ?? 0 };
+  const { data, error } = await supabase
+    .from('leaderboard_daily')
+    .select('total_duration_sec,active_user_count')
+    .eq('date', date)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    date,
+    totalDurationSec: (data?.total_duration_sec as number) ?? 0,
+    activeUserCount: (data?.active_user_count as number) ?? 0,
+  };
 }
 
 export async function readMonthlyLeaderboard(month: string) {
-  const db = getFirestore(app);
-  const docSnap = await getDoc(doc(db, `analytics/leaderboard/monthly/${month}`));
-  if (!docSnap.exists()) return { month, totalDurationSec: 0, activeUserCount: 0 };
-  const data = docSnap.data() as { totalDurationSec?: number; activeUserCount?: number };
-  return { month, totalDurationSec: data.totalDurationSec ?? 0, activeUserCount: data.activeUserCount ?? 0 };
+  const { data, error } = await supabase
+    .from('leaderboard_monthly')
+    .select('total_duration_sec,active_user_count')
+    .eq('month', month)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    month,
+    totalDurationSec: (data?.total_duration_sec as number) ?? 0,
+    activeUserCount: (data?.active_user_count as number) ?? 0,
+  };
 }

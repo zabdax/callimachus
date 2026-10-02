@@ -1,4 +1,4 @@
-import type { FirestoreAdapter } from '../db';
+import type { DbAdapter } from '../db';
 import { WorkerError } from '../db';
 
 const PLAN_MONTHS: Record<string, number> = { '1m': 1, '3m': 3, '6m': 6, '12m': 12 };
@@ -11,7 +11,7 @@ export interface AdminLookup { isAdmin(uid: string): Promise<boolean>; }
 export async function approvePayment(
   adminUid: string,
   input: { paymentRequestId: string },
-  db: FirestoreAdapter,
+  db: DbAdapter,
   admins: AdminLookup,
   audit: AuditLog,
   now: () => number = () => Date.now(),

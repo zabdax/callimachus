@@ -1,4 +1,4 @@
-import type { FirestoreAdapter } from '../db';
+import type { DbAdapter } from '../db';
 import { WorkerError } from '../db';
 import { splitByLocalMidnight } from '../time/bst';
 import { MAX_DRIFT_MS, assertDriftWithinTolerance } from './sessionStart';
@@ -24,7 +24,7 @@ export type ProcessSessionOutput = { ok: true; sessionIds: string[] };
 export async function processStudySession(
   uid: string,
   input: ProcessSessionInput,
-  db: FirestoreAdapter,
+  db: DbAdapter,
   ua: string,
 ): Promise<ProcessSessionOutput> {
   const { sessionId = '', clientStartTs, clientEndedTs, serverStartTs, pausedAccumMs = 0, chapterId = null } = input;

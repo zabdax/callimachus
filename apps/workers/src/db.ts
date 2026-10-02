@@ -1,4 +1,4 @@
-import type { FirebaseClaims } from './auth';
+import type { SupabaseClaims } from './auth';
 
 export type SessionDoc = {
   startedAtMs: number;
@@ -32,7 +32,7 @@ export type ActiveSession = {
   sessionId: string;
   serverStartTs: number;
   clientStartTs: number;
-  /** Firestore updateTime of the activeSession doc — used as a CAS precondition on clear. */
+  /** Row version of the active_sessions row — used as a CAS precondition on clear. */
   updateTime?: string;
 };
 
@@ -51,7 +51,7 @@ export type UserExport = {
   settings: Record<string, unknown> | null;
 };
 
-export interface FirestoreAdapter {
+export interface DbAdapter {
   getLastSessionEndedAt(uid: string): Promise<number | null>;
   countTodaySessions(uid: string, date: string): Promise<number>;
   writeSession(uid: string, id: string, doc: SessionDoc): Promise<void>;
@@ -69,7 +69,7 @@ export interface FirestoreAdapter {
   exportUserData(uid: string): Promise<UserExport>;
 }
 
-export class StubFirestore implements FirestoreAdapter {
+export class StubDb implements DbAdapter {
   getLastSessionEndedAt(_uid: string): Promise<number | null> { return Promise.resolve(null); }
   countTodaySessions(_uid: string, _date: string): Promise<number> { return Promise.resolve(0); }
   writeSession(_uid: string, _id: string, _doc: SessionDoc): Promise<void> { return Promise.resolve(); }
@@ -106,7 +106,7 @@ export class WorkerError extends Error {
   }
 }
 
-export function requireUid(claims: FirebaseClaims | undefined): string {
+export function requireUid(claims: SupabaseClaims | undefined): string {
   if (!claims?.sub || typeof claims.sub !== 'string') {
     throw new WorkerError('unauthenticated', 'Sign in first');
   }
