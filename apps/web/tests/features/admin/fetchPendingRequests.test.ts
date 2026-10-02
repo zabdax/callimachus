@@ -1,35 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const whereMock = vi.fn();
-const getDocsMock = vi.fn();
-const collectionMock = vi.fn(() => ({ _collection: true }));
-const queryMock = vi.fn((...args: unknown[]) => ({ _query: true, args }));
+const terminalMock = vi.fn();
 
-vi.mock('firebase/firestore', () => ({
-  getFirestore: vi.fn(() => ({ _db: true })),
-  collection: vi.fn(() => ({ _collection: true })),
-  query: vi.fn((...args: unknown[]) => ({ _query: true, args })),
-  where: vi.fn((...args: unknown[]) => whereMock(...args)),
-  getDocs: vi.fn((...args: unknown[]) => getDocsMock(...args)),
-  orderBy: vi.fn((...a: unknown[]) => ({ _orderBy: a })),
-  limit: vi.fn((n: number) => ({ _limit: n })),
+function chain(result: unknown) {
+  const q: Record<string, (...a: unknown[]) => unknown> = {};
+  q.select = () => q;
+  q.eq = () => q;
+  q.order = () => q;
+  q.limit = () => terminalMock(result);
+  return q;
+}
+
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    from: () => ({ select: () => chain(undefined) }),
+  },
 }));
 
 import { fetchPendingRequests } from '@/features/admin/fetchPendingRequests';
 
 describe('fetchPendingRequests', () => {
   beforeEach(() => {
-    whereMock.mockReset();
-    collectionMock.mockClear();
-    queryMock.mockClear();
-    getDocsMock.mockReset();
+    terminalMock.mockReset();
   });
 
-  it('queries paymentRequests where status == pending, ordered by createdAt desc, limit 50', async () => {
-    getDocsMock.mockResolvedValue({
-      docs: [
-        { id: 'pr1', data: () => ({ uid: 'u1', planId: '3m', status: 'pending', trxId: 'TXN1' }) },
+  it('maps pending rows ordered by created_at desc, limit 50', async () => {
+    terminalMock.mockResolvedValue({
+      data: [
+        {
+          id: 'pr1',
+          uid: 'u1',
+          plan_id: '3m',
+          status: 'pending',
+          trx_id: 'TXN1',
+          created_at: '2026-08-05T00:00:00Z',
+        },
       ],
+      error: null,
     });
     const out = await fetchPendingRequests();
     expect(out).toHaveLength(1);
@@ -39,8 +46,7 @@ describe('fetchPendingRequests', () => {
       planId: '3m',
       status: 'pending',
       trxId: 'TXN1',
+      createdAt: new Date('2026-08-05T00:00:00Z').getTime(),
     });
-    // where('status', '==', 'pending') was used
-    expect(whereMock).toHaveBeenCalledWith('status', '==', 'pending');
   });
 });

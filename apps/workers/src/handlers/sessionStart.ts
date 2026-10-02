@@ -1,4 +1,4 @@
-import type { FirestoreAdapter } from '../db';
+import type { DbAdapter } from '../db';
 import { WorkerError } from '../db';
 
 export const MAX_DRIFT_MS = 5 * 60_000;
@@ -9,7 +9,7 @@ export type SessionStartOutput = { sessionId: string; serverStartTs: number };
 export async function sessionStart(
   uid: string,
   input: SessionStartInput,
-  db: FirestoreAdapter,
+  db: DbAdapter,
   now: () => number = () => Date.now(),
 ): Promise<SessionStartOutput> {
   if (!Number.isSafeInteger(input.clientStartTs)) {

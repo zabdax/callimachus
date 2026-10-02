@@ -7,11 +7,9 @@ const { mockJwksGet, mockVerifyJwt } = vi.hoisted(() => ({
   mockVerifyJwt: vi.fn(),
 }));
 
-// Mirror the production Firebase issuer shape: https://securetoken.google.com/{projectId}.
-// `jwtVerify` is mocked in this file, so this string is decorative — but keeping it
-// faithful to auth.ts makes the test self-documenting.
-const PROJECT_ID = 'hsc-tracker-ef2b5';
-const ISS = `https://securetoken.google.com/${PROJECT_ID}`;
+// Mirror the production Supabase shape: iss <url>/auth/v1, aud authenticated.
+const SUPABASE_URL = 'https://test.supabase.co';
+const ISS = `${SUPABASE_URL}/auth/v1`;
 
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => ({ get: mockJwksGet })),
@@ -24,10 +22,10 @@ vi.mock('jose', () => ({
 }));
 
 // Subject under test
-import { verifyFirebaseIdToken, requireAuth, requireAdmin, type AuthVariables } from '../src/auth';
+import { verifySupabaseToken, requireAuth, requireAdmin, type AuthVariables } from '../src/auth';
 import { Hono } from 'hono';
 
-describe('verifyFirebaseIdToken', () => {
+describe('verifySupabaseToken', () => {
   beforeEach(() => {
     mockJwksGet.mockReset();
     mockVerifyJwt.mockReset();
@@ -36,26 +34,26 @@ describe('verifyFirebaseIdToken', () => {
   it('returns the decoded claims when the JWT is valid', async () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
-      protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'uid-1', admin: true, aud: 'hsc-prod', iss: ISS },
+      protectedHeader: { alg: 'ES256' },
+      payload: { sub: 'uid-1', role: 'authenticated', aud: 'authenticated', iss: ISS },
     });
-    const out = await verifyFirebaseIdToken('a.b.c', 'hsc-prod');
+    const out = await verifySupabaseToken('a.b.c', SUPABASE_URL);
     expect(out.sub).toBe('uid-1');
-    expect(out.admin).toBe(true);
+    expect(out.role).toBe('authenticated');
   });
 
   it('rejects when the token signature is invalid', async () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockRejectedValue(new Error('invalid signature'));
-    await expect(verifyFirebaseIdToken('a.b.c', 'hsc-prod')).rejects.toThrow(/signature/i);
+    await expect(verifySupabaseToken('a.b.c', SUPABASE_URL)).rejects.toThrow(/signature/i);
   });
 
-  it('rejects when the audience does not match the project', async () => {
+  it('rejects when the audience does not match', async () => {
     mockJwksGet.mockResolvedValue('public-key');
-    // jose throws JWTClaimValidationFailed when aud mismatches; verifyJwt
-    // simply throws — verifyFirebaseIdToken re-throws with a clear msg.
+    // jose throws JWTClaimValidationFailed when aud mismatches; the wrapper
+    // simply throws — verifySupabaseToken re-throws with a clear msg.
     mockVerifyJwt.mockRejectedValue(new Error('aud mismatch'));
-    await expect(verifyFirebaseIdToken('a.b.c', 'hsc-prod')).rejects.toThrow();
+    await expect(verifySupabaseToken('a.b.c', SUPABASE_URL)).rejects.toThrow();
   });
 });
 
@@ -68,11 +66,11 @@ describe('requireAuth (Hono middleware)', () => {
   it('passes through and sets c.set("uid", ...) when Authorization is valid', async () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
-      protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'uid-2', aud: 'p', iss: ISS },
+      protectedHeader: { alg: 'ES256' },
+      payload: { sub: 'uid-2', aud: 'authenticated', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('*', requireAuth('p'));
+    app.use('*', requireAuth(SUPABASE_URL));
     app.get('/who', (c) => c.json({ uid: c.get('uid') }));
     const res = await app.request('/who', {
       headers: { Authorization: 'Bearer x.y.z' },
@@ -83,7 +81,7 @@ describe('requireAuth (Hono middleware)', () => {
 
   it('returns 401 when no Authorization header', async () => {
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('*', requireAuth('p'));
+    app.use('*', requireAuth(SUPABASE_URL));
     app.get('/who', (c) => c.json({ uid: c.get('uid') }));
     const res = await app.request('/who');
     expect(res.status).toBe(401);
@@ -93,7 +91,7 @@ describe('requireAuth (Hono middleware)', () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockRejectedValue(new Error('bad sig'));
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('*', requireAuth('p'));
+    app.use('*', requireAuth(SUPABASE_URL));
     app.get('/who', (c) => c.json({ uid: c.get('uid') }));
     const res = await app.request('/who', {
       headers: { Authorization: 'Bearer x.y.z' },
@@ -101,17 +99,17 @@ describe('requireAuth (Hono middleware)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('exposes the admin claim when set', async () => {
+  it('exposes the admin flag from app_metadata when set', async () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
-      protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'admin-uid', admin: true, aud: 'p', iss: ISS },
+      protectedHeader: { alg: 'ES256' },
+      payload: { sub: 'admin-uid', app_metadata: { admin: true }, aud: 'authenticated', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('*', requireAuth('p'));
+    app.use('*', requireAuth(SUPABASE_URL));
     app.get('/who', (c) => {
       const claims = c.get('claims');
-      return c.json({ uid: c.get('uid'), admin: !!claims?.admin });
+      return c.json({ uid: c.get('uid'), admin: claims?.app_metadata?.admin === true });
     });
     const res = await app.request('/who', {
       headers: { Authorization: 'Bearer x.y.z' },
@@ -126,14 +124,14 @@ describe('requireAdmin (Hono middleware)', () => {
     mockVerifyJwt.mockReset();
   });
 
-  it('returns 403 when admin claim is missing', async () => {
+  it('returns 403 when admin flag is missing', async () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
-      protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'u1', aud: 'p', iss: ISS },
+      protectedHeader: { alg: 'ES256' },
+      payload: { sub: 'u1', aud: 'authenticated', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('*', requireAuth('p'));
+    app.use('*', requireAuth(SUPABASE_URL));
     app.use('*', requireAdmin());
     app.get('/secret', (c) => c.json({ ok: true }));
     const res = await app.request('/secret', {
@@ -142,14 +140,14 @@ describe('requireAdmin (Hono middleware)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('passes through when admin claim is set', async () => {
+  it('passes through when admin flag is set', async () => {
     mockJwksGet.mockResolvedValue('public-key');
     mockVerifyJwt.mockResolvedValue({
-      protectedHeader: { alg: 'RS256' },
-      payload: { sub: 'admin', admin: true, aud: 'p', iss: ISS },
+      protectedHeader: { alg: 'ES256' },
+      payload: { sub: 'admin', app_metadata: { admin: true }, aud: 'authenticated', iss: ISS },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('*', requireAuth('p'));
+    app.use('*', requireAuth(SUPABASE_URL));
     app.use('*', requireAdmin());
     app.get('/secret', (c) => c.json({ ok: true }));
     const res = await app.request('/secret', {

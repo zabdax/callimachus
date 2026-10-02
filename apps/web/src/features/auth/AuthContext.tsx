@@ -3,17 +3,15 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
-import { app, firebaseConfigError } from '@/lib/firebase/client';
+import { supabase, supabaseConfigError, toAuthUser, type AuthUser } from '@/lib/supabase/client';
 import { registerOfflineReplay } from '@/features/timer/stopAndSubmit';
 
 type AuthState = {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
   authError: Error | null;
   clearAuthError: () => void;
@@ -26,62 +24,55 @@ const Ctx = createContext<AuthState>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<Error | null>(null);
-  const auth = useMemo(() => getAuth(app), []);
-  const userRef = useRef<User | null>(null);
+  const userRef = useRef<AuthUser | null>(null);
   userRef.current = user;
 
   useEffect(() => {
-    // Explicit local persistence: without this, private-mode / blocked
-    // third-party storage drops the session on the redirect bounce-back and
-    // Google sign-in loops sign-in → Google → sign-in forever.
-    // Dynamic import (like getRedirectResult below) so unit tests that mock
-    // firebase/auth without setPersistence don't throw on static access.
-    import('firebase/auth').then(async ({ setPersistence, browserLocalPersistence }) => {
-      if (typeof setPersistence !== 'function') return;
-      try {
-        await setPersistence(auth, browserLocalPersistence);
-      } catch (e) {
-        console.error('Auth persistence error (private mode / blocked storage?):', e);
-        // Surface it: otherwise the redirect just loops with no message.
-        setAuthError(
-          Object.assign(e instanceof Error ? e : new Error(String(e)), { code: 'auth/storage-blocked' }),
-        );
-      }
-    }).catch(() => undefined);
+    let active = true;
+    // Supabase persists the session in first-party localStorage. If storage
+    // is blocked (private mode / tracking prevention), surface it instead of
+    // looping sign-in silently.
     const storageError = storageBlockedError();
     if (storageError) {
       console.error('Auth storage blocked (tracking prevention?):', storageError);
       setAuthError(storageError);
     }
-    // Capture redirect result once on mount: Firebase auto-handles the
-    // signInWithRedirect return. We surface errors via getRedirectResult
-    // so failures (e.g. "Google provider not enabled", "domain not
-    // authorized") aren't silent.
-    import('firebase/auth').then(async ({ getRedirectResult }) => {
-      try {
-        await getRedirectResult(auth);
-      } catch (e) {
-        console.error('Auth redirect error:', e);
-        setAuthError(e instanceof Error ? e : new Error(String(e)));
-      }
-    });
-    if (firebaseConfigError) {
-      console.error('Firebase config error:', firebaseConfigError);
-      setAuthError(firebaseConfigError);
+    if (supabaseConfigError) {
+      console.error('Supabase config error:', supabaseConfigError);
+      setAuthError(supabaseConfigError);
     }
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    }, (err) => {
-      // Auth state errors (rare; usually token-expired). Surface them.
-      console.error('Auth state error:', err);
-      setAuthError(err instanceof Error ? err : new Error(String(err)));
+    void supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error('Auth session error:', error);
+          setAuthError(error);
+        }
+        setUser(toAuthUser(data.session?.user.id, data.session?.user.email));
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (!active) return;
+        console.error('Auth session error:', e);
+        setAuthError(e instanceof Error ? e : new Error(String(e)));
+        setLoading(false);
+      });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUser(toAuthUser(session?.user.id, session?.user.email));
       setLoading(false);
     });
-  }, [auth]);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     // Replay sessions queued while offline as soon as we know who is
@@ -103,11 +94,9 @@ export function useAuth() {
 }
 
 /**
- * Probe first-party storage before Firebase Auth runs. Browsers with strict
- * Tracking Prevention / blocked third-party cookies (Edge, Firefox, Safari)
- * block the gapi iframe storage and drop the redirect session, so Google
- * sign-in loops back to /sign-in with no error. Detect it here and surface
- * an actionable message instead of a silent loop.
+ * Probe first-party storage before auth runs. Browsers with strict Tracking
+ * Prevention / blocked cookies drop the session, so sign-in would loop back
+ * with no error. Detect it here and surface an actionable message instead.
  */
 function storageBlockedError(): Error | null {
   try {

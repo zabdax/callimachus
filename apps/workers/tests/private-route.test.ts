@@ -16,9 +16,9 @@ vi.mock('jose', () => ({
   },
 }));
 
-// Import AFTER mocks are set up. We bypass the project's router
-// because it uses process.env.FIREBASE_PROJECT_ID — easier to recreate
-// the middleware chain here than to stub the env.
+// Import AFTER mocks are set up. We bypass the project's router and pass the
+// Supabase URL directly — easier to recreate the middleware chain here than
+// to stub the env.
 import { requireAuth, type AuthVariables } from '../src/auth';
 
 describe('router wire-up: /api/private/me (using requireAuth directly)', () => {
@@ -33,17 +33,17 @@ describe('router wire-up: /api/private/me (using requireAuth directly)', () => {
       protectedHeader: { alg: 'RS256' },
       payload: {
         sub: 'uid-private',
-        admin: false,
-        aud: 'test-project',
-        iss: 'https://securetoken.google.com/',
+        role: 'authenticated',
+        aud: 'authenticated',
+        iss: 'https://test.supabase.co/auth/v1',
       },
     });
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('/api/private/*', requireAuth('test-project'));
+    app.use('/api/private/*', requireAuth('https://test.supabase.co'));
     app.get('/api/private/me', (c) => {
       const uid = c.get('uid');
       const claims = c.get('claims');
-      return c.json({ ok: true, uid, admin: !!claims?.admin });
+      return c.json({ ok: true, uid, admin: claims?.app_metadata?.admin === true });
     });
     const res = await app.request('/api/private/me', {
       headers: { Authorization: 'Bearer x.y.z' },
@@ -54,7 +54,7 @@ describe('router wire-up: /api/private/me (using requireAuth directly)', () => {
 
   it('returns 401 when no Authorization header', async () => {
     const app = new Hono<{ Variables: AuthVariables }>();
-    app.use('/api/private/*', requireAuth('test-project'));
+    app.use('/api/private/*', requireAuth('https://test.supabase.co'));
     app.get('/api/private/me', (c) => c.json({ ok: true }));
     const res = await app.request('/api/private/me');
     expect(res.status).toBe(401);

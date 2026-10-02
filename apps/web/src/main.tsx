@@ -4,7 +4,6 @@ import { ErrorBoundary } from '@/app/ErrorBoundary';
 import { AppRouter } from '@/app/router';
 import { initSentry } from '@/lib/sentry';
 import { registerSW } from 'virtual:pwa-register';
-import '@/lib/firebase/appCheck';
 import '@/styles/index.css';
 
 initSentry();

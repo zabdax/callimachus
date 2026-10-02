@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
-import { app } from '@/lib/firebase/client';
+import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/features/auth/AuthContext';
 
 export type AdminState = { isAdmin: boolean; loading: boolean };
 
 /**
- * Returns true if the signed-in user has an entry in /admins/{uid}.
- * The Firestore rules use the same check via `isAdmin()` so the
- * admin gate is enforced server-side; this hook is for UX only.
+ * Returns true if the signed-in user has a row in `admins`.
+ * RLS uses the same check, so the admin gate is enforced server-side;
+ * this hook is for UX only.
  *
  * Also reports `loading` so `RequireAdmin` can wait until the check
  * resolves instead of redirecting before the read finishes.
@@ -28,10 +27,12 @@ export function useIsAdmin(): AdminState {
     setLoading(true);
     (async () => {
       try {
-        const snap = await getDoc(
-          doc(getFirestore(app), 'admins', user.uid),
-        );
-        if (!cancelled) setIsAdmin(snap.exists());
+        const { data, error } = await supabase
+          .from('admins')
+          .select('uid')
+          .eq('uid', user.uid)
+          .maybeSingle();
+        if (!cancelled) setIsAdmin(!error && !!data);
       } catch {
         if (!cancelled) setIsAdmin(false);
       } finally {

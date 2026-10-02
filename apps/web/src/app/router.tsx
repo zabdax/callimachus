@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Providers } from './Providers';
 import { SignInScreen } from '@/features/auth/SignInScreen';
+import { AuthCallback } from '@/features/auth/AuthCallback';
 import { Onboarding } from '@/features/onboarding/Onboarding';
 import { Home } from '@/features/home/Home';
 import { Overview } from '@/features/home/Overview';
@@ -19,6 +20,7 @@ import { useAuth } from '@/features/auth/AuthContext';
 
 const router = createBrowserRouter([
   { path: '/sign-in', element: <SignInScreen /> },
+  { path: '/auth/callback', element: <AuthCallback /> },
   { path: '/welcome', element: <Landing /> },
   { path: '/privacy', element: <PrivacyPolicy /> },
   {

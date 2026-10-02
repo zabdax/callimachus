@@ -3,9 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { getFirestore } from 'firebase/firestore';
-import { app } from '@/lib/firebase/client';
+import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { BATCH_SEED } from '@/features/batches/seedData';
 import { recomputeBatchStatus } from '@/features/batches/recomputeBatchStatus';
@@ -21,13 +19,18 @@ export function OnboardingForm({ uid, onDone }: { uid: string; onDone: (value: F
   const submit = handleSubmit(async (data) => {
     setSubmitError(null);
     try {
-      // Never write displayName here: re-submitting onboarding would clobber
-      // the Google profile name already stored on users/{uid}.
-      // Also never write createdAt on merge: firestore.rules validProfileUpdate
-      // only allows changed keys in [displayName,email,photoURL,college,batchId,
-      // medium,timezone,updatedAt] — including createdAt on a re-submit fails
-      // with permission-denied and leaves the user stuck on onboarding.
-      await setDoc(doc(getFirestore(app), 'users', uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      // Upsert keyed by auth user id. Never write displayName here:
+      // re-submitting onboarding would clobber the Google profile name.
+      const { error } = await supabase.from('profiles').upsert(
+        {
+          id: uid,
+          medium: data.medium,
+          batch_id: data.batchId,
+          college: data.college,
+        },
+        { onConflict: 'id' },
+      );
+      if (error) throw error;
       onDone(data);
     } catch (error) { setSubmitError((error as Error).message || 'We could not save your profile. Please try again.'); }
   });

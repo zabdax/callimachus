@@ -1,17 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
-const docMock = vi.fn();
-const getDocMock = vi.fn();
+const maybeSingleMock = vi.fn();
 
-vi.mock('firebase/firestore', () => ({
-  getFirestore: vi.fn(() => ({ _db: true })),
-  doc: (...args: unknown[]) => docMock(...args),
-  getDoc: (...args: unknown[]) => getDocMock(...args),
-}));
-
-vi.mock('@/lib/firebase/client', () => ({
-  app: { _app: true },
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: (...a: unknown[]) => maybeSingleMock(...a) }) }),
+    }),
+  },
 }));
 
 const useAuthMock = vi.fn();
@@ -23,8 +20,7 @@ import { useIsAdmin } from '@/features/admin/useIsAdmin';
 
 describe('useIsAdmin', () => {
   beforeEach(() => {
-    docMock.mockReset();
-    getDocMock.mockReset();
+    maybeSingleMock.mockReset();
     useAuthMock.mockReset();
   });
 
@@ -32,19 +28,19 @@ describe('useIsAdmin', () => {
     useAuthMock.mockReturnValue({ user: null });
     const { result } = renderHook(() => useIsAdmin());
     await waitFor(() => expect(result.current.isAdmin).toBe(false));
-    expect(getDocMock).not.toHaveBeenCalled();
+    expect(maybeSingleMock).not.toHaveBeenCalled();
   });
 
-  it('returns false when /admins/{uid} doc does not exist', async () => {
+  it('returns false when no admins row exists', async () => {
     useAuthMock.mockReturnValue({ user: { uid: 'u1' } });
-    getDocMock.mockResolvedValue({ exists: () => false });
+    maybeSingleMock.mockResolvedValue({ data: null, error: null });
     const { result } = renderHook(() => useIsAdmin());
     await waitFor(() => expect(result.current.isAdmin).toBe(false));
   });
 
-  it('returns true when /admins/{uid} doc exists', async () => {
+  it('returns true when an admins row exists', async () => {
     useAuthMock.mockReturnValue({ user: { uid: 'admin-uid' } });
-    getDocMock.mockResolvedValue({ exists: () => true });
+    maybeSingleMock.mockResolvedValue({ data: { uid: 'admin-uid' }, error: null });
     const { result } = renderHook(() => useIsAdmin());
     await waitFor(() => expect(result.current.isAdmin).toBe(true));
   });

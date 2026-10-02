@@ -1,22 +1,16 @@
-import { getAuth } from 'firebase/auth';
-import { app as firebaseApp } from '@/lib/firebase/client';
-import { getAppCheckToken } from '@/lib/firebase/appCheck';
+import { getAccessToken, supabase } from '@/lib/supabase/client';
 
 /**
- * Thin wrapper that mirrors Firebase `httpsCallable` semantics against
- * a Cloudflare Worker deployment. Each call:
- *   - Reads the current Firebase ID token
+ * Thin wrapper against a Cloudflare Worker deployment. Each call:
+ *   - Reads the current Supabase access token
  *   - POSTs to `${WORKERS_BASE}/api/<name>` with `{ data: ... }`
  *   - Returns `{ data: ... }` from the response body
- *
- * The Workers side responds with the same shape Cloud Functions use,
- * so the swap from `httpsCallable` to `callWorker` is mechanical.
  */
 
 export const WORKERS_BASE =
   (import.meta.env.VITE_WORKERS_BASE as string | undefined) ??
   // Default to a same-origin relative path so this works on any host
-  // (Cloudflare Pages custom domain, Firebase Hosting fallback, etc.).
+  // (Cloudflare Pages custom domain, Vercel, etc.).
   '';
 
 export class WorkerError extends Error {
@@ -30,18 +24,16 @@ export class WorkerError extends Error {
 }
 
 async function fetchIdToken(forceRefresh = false): Promise<string | null> {
-  const auth = getAuth(firebaseApp);
-  // Wait for the post-redirect auth state: reading currentUser synchronously
-  // right after the /sign-in bounce-back returns null and the call goes out
-  // with no Authorization header → worker 401 that looks like "login broken".
+  // Wait for any in-flight OAuth callback to settle: reading the session
+  // synchronously right after /auth/callback can return null and the call
+  // goes out with no Authorization header → worker 401 that looks like
+  // "login broken".
   try {
-    await auth.authStateReady();
+    await supabase.auth.getSession();
   } catch {
-    // Older SDKs without authStateReady — fall through to currentUser.
+    // Older clients — fall through to the token read.
   }
-  const u = auth.currentUser;
-  if (!u) return null;
-  return u.getIdToken(forceRefresh);
+  return getAccessToken(forceRefresh);
 }
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -56,27 +48,26 @@ export async function callWorker<TReq, TRes>(
         'Set VITE_WORKERS_BASE to the Worker URL and rebuild.',
     );
   }
-  const doFetch = async (idToken: string | null, appCheckToken: string | null) =>
+  const doFetch = async (idToken: string | null) =>
     fetch(`${WORKERS_BASE}/api/${name}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        ...(appCheckToken ? { 'X-Firebase-AppCheck': appCheckToken } : {}),
       },
       body: JSON.stringify({ data: req }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-  const [idToken, appCheckToken] = await Promise.all([fetchIdToken(), getAppCheckToken()]);
-  let res = await doFetch(idToken, appCheckToken);
+  const idToken = await fetchIdToken();
+  let res = await doFetch(idToken);
 
-  // ID tokens expire after ~1h and the worker strictly rejects expired ones.
-  // Retry once with a force-refreshed token instead of surfacing 401.
+  // Access tokens expire after ~1h and the worker strictly rejects expired
+  // ones. Retry once with a force-refreshed token instead of surfacing 401.
   if (res.status === 401 && idToken) {
     const fresh = await fetchIdToken(true).catch(() => null);
     if (fresh && fresh !== idToken) {
-      res = await doFetch(fresh, appCheckToken);
+      res = await doFetch(fresh);
     }
   }
 

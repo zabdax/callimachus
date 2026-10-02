@@ -30,26 +30,26 @@ describe('findMissingEnv', () => {
     const env: Record<string, string> = Object.fromEntries(
       REQUIRED_PROD_ENV.map((k) => [k, 'value']),
     );
-    env.VITE_FIREBASE_API_KEY = '';
-    expect(findMissingEnv(env, REQUIRED_PROD_ENV)).toEqual(['VITE_FIREBASE_API_KEY']);
+    env.VITE_SUPABASE_URL = '';
+    expect(findMissingEnv(env, REQUIRED_PROD_ENV)).toEqual(['VITE_SUPABASE_URL']);
   });
 
-  it('has 8 required keys covering Firebase + Sentry', () => {
-    expect(REQUIRED_PROD_ENV).toHaveLength(8);
+  it('has 4 required keys covering Supabase + Sentry', () => {
+    expect(REQUIRED_PROD_ENV).toHaveLength(4);
     expect(REQUIRED_PROD_ENV).toContain('VITE_SENTRY_DSN');
-    expect(REQUIRED_PROD_ENV).toContain('VITE_FIREBASE_PROJECT_ID');
+    expect(REQUIRED_PROD_ENV).toContain('VITE_SUPABASE_URL');
   });
 });
 
 describe('findPlaceholderEnv', () => {
   it('flags values that still contain a placeholder marker', () => {
     const env = {
-      VITE_FIREBASE_PROJECT_ID: '<your-project-id>',
-      VITE_FIREBASE_API_KEY: 'AIza-real-key',
+      VITE_SUPABASE_URL: '<your-supabase-url>',
+      VITE_SUPABASE_ANON_KEY: 'eyJhbGciOi-real-key',
       OTHER: 'fine',
     };
     expect(findPlaceholderEnv(env, PLACEHOLDER_MARKERS)).toEqual([
-      'VITE_FIREBASE_PROJECT_ID',
+      'VITE_SUPABASE_URL',
     ]);
   });
 

@@ -15,11 +15,14 @@ vi.mock('@/features/admin/fetchPendingRequests', () => ({
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
-vi.mock('firebase/auth', () => ({
-  getAuth: () => ({ currentUser: { getIdToken: async () => 't' } }),
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: { access_token: 't' } }, error: null }),
+    },
+  },
+  getAccessToken: async () => 't',
 }));
-
-vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 import { ApprovalQueue } from '@/features/admin/ApprovalQueue';
 

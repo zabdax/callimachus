@@ -13,7 +13,7 @@ const TZ = 'Asia/Dhaka';
  * so dedupe / no-op behavior matters.
  *
  * Adapters are injected so the cron handlers can be unit-tested
- * without spinning up the Firestore REST client.
+ * without spinning up the Supabase client.
  */
 
 export interface CronAdapters {

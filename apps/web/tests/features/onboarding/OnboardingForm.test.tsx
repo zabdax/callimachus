@@ -3,16 +3,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@/lib/i18n';
 
-const setDocMock = vi.fn().mockResolvedValue(undefined);
+const upsertMock = vi.fn().mockResolvedValue({ data: null, error: null });
 
-vi.mock('firebase/firestore', () => ({
-  getFirestore: vi.fn(() => ({ _db: true })),
-  doc: vi.fn(() => ({ _doc: true })),
-  setDoc: (...a: unknown[]) => setDocMock(...a),
-  serverTimestamp: () => ({ __serverTimestamp: true }),
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    from: () => ({ upsert: (...a: unknown[]) => upsertMock(...a) }),
+  },
 }));
-
-vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 import { OnboardingForm } from '@/features/onboarding/OnboardingForm';
 
@@ -21,7 +18,7 @@ function renderWithI18n(ui: React.ReactNode) {
 }
 
 describe('OnboardingForm', () => {
-  it('submits medium + batch + college to /users/{uid} via setDoc', async () => {
+  it('upserts medium + batch + college to profiles without displayName', async () => {
     const onDone = vi.fn();
     renderWithI18n(<OnboardingForm uid="u1" onDone={onDone} />);
 
@@ -45,9 +42,12 @@ describe('OnboardingForm', () => {
         medium: 'bangla',
       }),
     );
-    expect(setDocMock).toHaveBeenCalled();
+    expect(upsertMock).toHaveBeenCalled();
     // Re-submitting onboarding must not clobber an existing profile name.
-    const payload = setDocMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    const payload = upsertMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.id).toBe('u1');
+    expect(payload.batch_id).toBe('HSC-2027');
+    expect(payload).not.toHaveProperty('display_name');
     expect(payload).not.toHaveProperty('displayName');
   });
 });

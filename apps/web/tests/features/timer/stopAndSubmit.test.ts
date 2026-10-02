@@ -6,13 +6,14 @@ import { stopAndSubmit, replayPending } from '@/features/timer/stopAndSubmit';
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
-vi.mock('firebase/auth', () => ({
-  getAuth: () => ({
-    currentUser: { getIdToken: async () => 'token' },
-  }),
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: { access_token: 'token' } }, error: null }),
+    },
+  },
+  getAccessToken: async () => 'token',
 }));
-
-vi.mock('@/lib/firebase/client', () => ({ app: { _app: true } }));
 
 describe('stopAndSubmit', () => {
   beforeEach(async () => { await dropPending(); fetchMock.mockReset(); });

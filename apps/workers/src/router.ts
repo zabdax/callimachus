@@ -5,7 +5,7 @@ import { processStudySession } from './handlers/processStudySession.js';
 import { sessionStart } from './handlers/sessionStart.js';
 import { approvePayment } from './handlers/approvePayment.js';
 import { requireUid, WorkerError } from './db.js';
-import { makeRestAdapter, makeAuditLogger } from './firebase-admin.js';
+import { makeDbAdapter, makeAuditLogger } from './supabase.js';
 
 /**
  * Origin allowlist built from ALLOWED_ORIGINS. Plain entries match
@@ -33,8 +33,8 @@ function buildOriginMatcher(raw: string): (origin: string) => boolean {
 
 export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   const app = new Hono<{ Variables: AuthVariables }>();
-  const db = makeRestAdapter({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
-  const audit = makeAuditLogger({ projectId: env.FIREBASE_PROJECT_ID, accessToken: env.FIREBASE_ACCESS_TOKEN });
+  const db = makeDbAdapter({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_KEY });
+  const audit = makeAuditLogger({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_KEY });
   const originAllowed = buildOriginMatcher(env.ALLOWED_ORIGINS || env.WORKERS_BASE);
 
   app.use('*', async (c, next) => {
@@ -51,27 +51,23 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   });
 
   app.get('/api/echo', (c) => c.json({ ok: true, service: 'callimachus-workers', ts: Date.now() }));
-  // Unauthenticated health check for diagnosing FIREBASE_ACCESS_TOKEN /
-  // config issues without leaking the secret. Reports presence + token
-  // prefix only (ya29... expected; AIza... means wrong credential type).
+  // Unauthenticated health check for diagnosing Supabase connectivity /
+  // config issues without leaking the secret. Reports presence only.
   app.get('/api/health', (c) => {
-    const token = env.FIREBASE_ACCESS_TOKEN ?? '';
     return c.json({
       ok: true,
       service: 'callimachus-workers',
       ts: Date.now(),
       config: {
-        hasProjectId: Boolean(env.FIREBASE_PROJECT_ID),
-        projectId: env.FIREBASE_PROJECT_ID ?? '',
-        hasAccessToken: Boolean(token),
-        tokenPrefix: token.slice(0, 4),
-        tokenLength: token.length,
+        hasSupabaseUrl: Boolean(env.SUPABASE_URL),
+        supabaseUrl: env.SUPABASE_URL ?? '',
+        hasServiceKey: Boolean(env.SUPABASE_SERVICE_KEY),
       },
     });
   });
-  app.get('/api/private/me', requireAuth(env.FIREBASE_PROJECT_ID), (c) => c.json({ ok: true, uid: c.get('uid'), admin: !!c.get('claims')?.admin }));
+  app.get('/api/private/me', requireAuth(env.SUPABASE_URL), (c) => c.json({ ok: true, uid: c.get('uid'), admin: !!(c.get('claims')?.app_metadata?.admin) }));
 
-  app.post('/api/sessionStart', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
+  app.post('/api/sessionStart', requireAuth(env.SUPABASE_URL), async (c) => {
     try {
       const body = await readBody<{ clientStartTs?: unknown }>(c);
       if (!Number.isSafeInteger(body.clientStartTs)) throw new WorkerError('invalid-argument', 'clientStartTs must be an integer timestamp');
@@ -79,7 +75,7 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
     } catch (error) { return workerErrorResponse(c, error); }
   });
 
-  app.post('/api/processStudySession', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
+  app.post('/api/processStudySession', requireAuth(env.SUPABASE_URL), async (c) => {
     try {
       const body = await readBody<Record<string, unknown>>(c);
       const uid = requireUid(c.get('claims'));
@@ -87,12 +83,12 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
     } catch (error) { return workerErrorResponse(c, error); }
   });
 
-  app.post('/api/getUserData', requireAuth(env.FIREBASE_PROJECT_ID), async (c) => {
+  app.post('/api/getUserData', requireAuth(env.SUPABASE_URL), async (c) => {
     try { return c.json({ data: { ...(await db.exportUserData(requireUid(c.get('claims')))), exportedAt: Date.now() } }); }
     catch (error) { return workerErrorResponse(c, error); }
   });
 
-  app.post('/api/approvePayment', requireAuth(env.FIREBASE_PROJECT_ID), requireAdmin(), async (c) => {
+  app.post('/api/approvePayment', requireAuth(env.SUPABASE_URL), requireAdmin(), async (c) => {
     try {
       const body = await readBody<{ paymentRequestId?: unknown }>(c);
       if (typeof body.paymentRequestId !== 'string') throw new WorkerError('invalid-argument', 'paymentRequestId required');
@@ -105,8 +101,8 @@ export function createApp(env: Env): Hono<{ Variables: AuthVariables }> {
   return app;
 }
 
-function corsHeaders(origin: string): Record<string, string> { return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type,X-Firebase-AppCheck', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }; }
+function corsHeaders(origin: string): Record<string, string> { return { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }; }
 async function readBody<T>(c: { req: { json: () => Promise<unknown> } }): Promise<T> { const body = await c.req.json().catch(() => null); if (!body || typeof body !== 'object' || Array.isArray(body)) throw new WorkerError('invalid-argument', 'invalid JSON body'); const value = (body as { data?: unknown }).data ?? body; if (!value || typeof value !== 'object' || Array.isArray(value)) throw new WorkerError('invalid-argument', 'invalid request data'); return value as T; }
 function workerErrorResponse(c: { json: (body: unknown, status?: number) => Response }, error: unknown): Response { if (error instanceof WorkerError) { const out = error.toResponse(); return c.json(out.body, out.status); } console.error('worker request failed', error); return c.json({ ok: false, error: 'internal', message: 'Request could not be completed' }, 500); }
 
-export const app = createApp({ ENVIRONMENT: 'development', FIREBASE_PROJECT_ID: 'test-project', FIREBASE_ACCESS_TOKEN: 'test-token', WORKERS_BASE: '', ALLOWED_ORIGINS: '', TRACKER_CACHE: undefined as unknown as KVNamespace });
+export const app = createApp({ ENVIRONMENT: 'development', SUPABASE_URL: 'https://test.supabase.co', SUPABASE_SERVICE_KEY: 'eyJ0ZXN0LWtleQ', WORKERS_BASE: '', ALLOWED_ORIGINS: '', TRACKER_CACHE: undefined as unknown as KVNamespace });

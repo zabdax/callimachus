@@ -4,8 +4,8 @@ import type { Env } from '../src/env.js';
 
 const env: Env = {
   ENVIRONMENT: 'development',
-  FIREBASE_PROJECT_ID: 'test-project',
-  FIREBASE_ACCESS_TOKEN: 'test-token',
+  SUPABASE_URL: 'https://test.supabase.co',
+  SUPABASE_SERVICE_KEY: 'eyJ0ZXN0LWtleQ',
   WORKERS_BASE: '',
   ALLOWED_ORIGINS: 'https://exact.example.com,*-team.vercel.app,*.dots.example.com',
   TRACKER_CACHE: undefined as unknown as KVNamespace,
