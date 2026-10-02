@@ -24,14 +24,34 @@ if (missingKeys.length > 0) {
 export const supabaseConfigError =
   missingKeys.length > 0 ? new Error(`Missing Supabase config: ${missingKeys.join(', ')}`) : null;
 
-/** Shared browser client (PKCE flow, first-party localStorage session). */
-export const supabase: SupabaseClient = createClient(url ?? '', anonKey ?? '', {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+/**
+ * Shared browser client (PKCE flow, first-party localStorage session).
+ *
+ * Never throws at import: with missing env (e.g. a test server started
+ * without secrets) the client points at an unreachable placeholder and every
+ * auth call fails gracefully, while `supabaseConfigError` (surfaced by
+ * AuthContext) explains the real problem. Throwing here would blank the
+ * entire app including public routes.
+ */
+function createSupabaseClient(): SupabaseClient {
+  if (missingKeys.length > 0) {
+    console.error(
+      `[supabase] Using unreachable placeholder client — set ${missingKeys.join(', ')} and rebuild.`,
+    );
+    return createClient('https://placeholder.supabase.co', 'placeholder-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+  }
+  return createClient(url as string, anonKey as string, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+}
+
+export const supabase: SupabaseClient = createSupabaseClient();
 
 /** Minimal user shape used across the app (stable across auth providers). */
 export type AuthUser = { uid: string; email: string | null };
