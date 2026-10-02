@@ -21,13 +21,19 @@ export function requireWorkerConfig(env: Env): void {
     );
   }
   // Fail fast when the wrong key type was pasted: the anon (publishable) key
-  // starts with a different prefix than the service_role key and is bound by
-  // RLS, so every privileged write would 401/403 and look like a code bug.
-  if (env.ENVIRONMENT === 'production' && !env.SUPABASE_SERVICE_KEY.startsWith('eyJ')) {
-    throw new Error(
-      'SUPABASE_SERVICE_KEY does not look like a Supabase JWT (expected eyJ...). ' +
-        'Paste the service_role key from Supabase dashboard → Project Settings → API. ' +
-        'Do NOT use the anon key here — it is RLS-bound and privileged writes will fail.',
-    );
+  // is RLS-bound, so every privileged write would 401/403 and look like a
+  // code bug. Service keys are either legacy JWTs (eyJ...) or new-format
+  // sb_secret_... keys — both are accepted by PostgREST.
+  if (env.ENVIRONMENT === 'production') {
+    const key = env.SUPABASE_SERVICE_KEY;
+    const looksService =
+      key.startsWith('eyJ') || key.startsWith('sb_secret_');
+    if (!looksService) {
+      throw new Error(
+        'SUPABASE_SERVICE_KEY does not look like a Supabase service key (expected eyJ... or sb_secret_...). ' +
+          'Paste the service_role key from Supabase dashboard → Project Settings → API. ' +
+          'Do NOT use the anon key here — it is RLS-bound and privileged writes will fail.',
+      );
+    }
   }
 }
