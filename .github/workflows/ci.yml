@@ -4,6 +4,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 # Least privilege — jobs don't need the default GITHUB_TOKEN scopes.
 permissions: {}
